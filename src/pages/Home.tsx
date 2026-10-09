@@ -12,6 +12,8 @@ import { BreathingCircle } from "../components/Breathing";
 import { ScrollWords } from "../components/ScrollWords";
 import { Marquee } from "../components/Marquee";
 import { CtaStrip } from "../components/CtaStrip";
+import { Filmstrip } from "../components/gallery/Filmstrip";
+import { ParallaxFrames } from "../components/gallery/ParallaxFrames";
 import { usePageTitle } from "../components/usePageTitle";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -323,40 +325,31 @@ function Quote() {
 
 function GalleryTeaser() {
   const { t } = useLang();
-  const ref = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
-  const fast = useTransform(scrollYProgress, [0, 1], [120, -120]);
-  const slow = useTransform(scrollYProgress, [0, 1], [40, -40]);
-  const imgs = [
-    { src: IMG.happy, cls: "aspect-[4/3] w-[62vw] sm:w-[30vw]", y: slow },
-    { src: IMG.heart, cls: "aspect-[3/4] w-[44vw] sm:w-[19vw]", y: fast },
-    { src: IMG.lomi3, cls: "aspect-[3/4] w-[44vw] sm:w-[17vw]", y: slow },
-    { src: IMG.sari, cls: "aspect-[3/4] w-[44vw] sm:w-[19vw]", y: fast },
-  ];
   return (
-    <section ref={ref} className="relative overflow-hidden py-28 sm:py-36">
-      <div className="container-x flex flex-wrap items-end justify-between gap-8">
-        <div>
-          <FadeUp>
-            <span className="eyebrow">{t.home.galleryEyebrow}</span>
-          </FadeUp>
-          <h2 className="display-lg mt-6 text-ink">
-            <RevealText text={t.home.galleryTitle} />
-            <RevealText text={t.home.galleryAccent} className="italic-accent" delay={0.2} />
-          </h2>
+    <section className="relative border-t border-forest/10 py-28 sm:py-36">
+      <div className="container-x">
+        <div className="flex flex-wrap items-end justify-between gap-8">
+          <div>
+            <FadeUp>
+              <span className="eyebrow">{t.gallery.framesEyebrow}</span>
+            </FadeUp>
+            <h2 className="display-lg mt-6 text-ink">
+              <RevealText text={t.gallery.framesTitle} />
+              <RevealText text={t.gallery.framesAccent} className="italic-accent" delay={0.2} />
+            </h2>
+          </div>
         </div>
-        <FadeUp>
-          <Button to={ROUTES.gallery} variant="ghost">
-            {t.home.galleryCta}
-          </Button>
-        </FadeUp>
-      </div>
-      <div className="mt-20 flex items-center gap-5 overflow-x-auto px-5 pb-10 sm:justify-center sm:gap-8 sm:overflow-visible sm:px-0 [scrollbar-width:none]">
-        {imgs.map((im, i) => (
-          <motion.div key={i} style={{ y: im.y }} className="shrink-0">
-            <RevealImage src={im.src} alt="" className={`${im.cls} rounded-[1.5rem]`} parallax={20} />
-          </motion.div>
-        ))}
+        <div className="mt-16">
+          <ParallaxFrames />
+        </div>
+        <div className="mt-14 flex justify-end">
+          <Link to={ROUTES.gallery} className="group inline-flex items-center gap-2 font-semibold text-forest">
+            <span className="border-b border-forest pb-0.5 transition-colors group-hover:border-saffron group-hover:text-saffron">
+              {t.home.galleryCta}
+            </span>
+            <Arrow dir="up-right" className="h-4 w-4 transition-transform duration-500 group-hover:rotate-45" />
+          </Link>
+        </div>
       </div>
     </section>
   );
@@ -371,6 +364,7 @@ export default function Home() {
       <Marquee items={t.home.marquee} />
       <Intro />
       <Pillars />
+      <Filmstrip />
       <Breathe />
       <Quote />
       <GalleryTeaser />
