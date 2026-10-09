@@ -1,3 +1,4 @@
+import { Arrow } from "../components/Arrow";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext";
@@ -7,7 +8,8 @@ import { FadeUp, RevealText } from "../components/Reveal";
 import { Button } from "../components/Magnetic";
 import { usePageTitle } from "../components/usePageTitle";
 
-const SLIDES = [IMG.goldenTemple, IMG.heart, IMG.banyan, IMG.ayurveda, IMG.sari, IMG.indiaPortrait];
+// Order matches t.travel.highlights: Ayurveda, Yoga & meditation, Temples, Connection (+ 2 extra photos).
+const SLIDES = [IMG.ayurveda, IMG.heart, IMG.goldenTemple, IMG.sari, IMG.banyan, IMG.indiaPortrait];
 
 /** Desktop: vertical scroll drives a horizontal filmstrip. Mobile: native swipe. */
 function HorizontalStrip({ hint }: { hint: string }) {
@@ -52,7 +54,7 @@ function HorizontalStrip({ hint }: { hint: string }) {
         <div className="sticky top-0 flex h-screen flex-col justify-center overflow-hidden">
           <div className="container-x mb-8 flex items-end justify-between">
             <span className="eyebrow">{t.travel.highlightsTitle}</span>
-            <span className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-forest/50">{hint} →</span>
+            <span className="text-[0.7rem] font-semibold uppercase tracking-[0.3em] text-forest/50">{hint} <Arrow className="ml-1 h-4 w-4 align-[-3px]" /></span>
           </div>
           <motion.div ref={trackRef} style={{ x }} className="flex items-start gap-10 pl-12 pr-[20vw]">
             {cards}
@@ -62,7 +64,7 @@ function HorizontalStrip({ hint }: { hint: string }) {
       <section className="py-20 lg:hidden">
         <div className="container-x mb-8 flex items-end justify-between">
           <span className="eyebrow">{t.travel.highlightsTitle}</span>
-          <span className="text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-forest/50">{hint} →</span>
+          <span className="text-[0.65rem] font-semibold uppercase tracking-[0.3em] text-forest/50">{hint} <Arrow className="ml-1 h-4 w-4 align-[-3px]" /></span>
         </div>
         <div className="flex snap-x snap-mandatory gap-6 overflow-x-auto px-5 pb-6 [scrollbar-width:none]">
           {SLIDES.map((src, i) => (

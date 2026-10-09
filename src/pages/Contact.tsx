@@ -1,3 +1,4 @@
+import { Arrow } from "../components/Arrow";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -142,7 +143,7 @@ export default function Contact() {
                   <li key={s.name}>
                     <a href={s.href} target="_blank" rel="noreferrer" className="group flex items-center justify-between py-4 text-forest transition-colors hover:text-saffron">
                       <span className="font-display text-xl">{s.name}</span>
-                      <span className="transition-transform duration-500 group-hover:-rotate-45">→</span>
+                      <span className="transition-transform duration-500 group-hover:-rotate-45"><Arrow className="h-5 w-5" /></span>
                     </a>
                   </li>
                 ))}

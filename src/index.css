@@ -43,7 +43,8 @@
   h3,
   h4 {
     @apply font-display;
-    font-variation-settings: "SOFT" 60, "WONK" 0;
+    font-optical-sizing: none;
+    font-variation-settings: "SOFT" 60, "WONK" 0, "opsz" 48;
     letter-spacing: -0.02em;
   }
   :focus-visible {
@@ -68,7 +69,8 @@
     @apply block h-px w-8 bg-saffron;
   }
   .display-xl {
-    @apply font-display font-light leading-[0.95];
+    @apply font-display leading-[0.95];
+    font-weight: 380;
     font-size: clamp(2.9rem, 8.4vw, 8.5rem);
   }
   .display-lg {
@@ -84,7 +86,8 @@
   }
   .italic-accent {
     @apply font-display italic text-saffron;
-    font-variation-settings: "SOFT" 100, "WONK" 1;
+    font-optical-sizing: none;
+    font-variation-settings: "SOFT" 100, "WONK" 1, "opsz" 48;
   }
   .grain::after {
     content: "";

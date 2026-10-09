@@ -20,6 +20,7 @@ export function RevealText({
   immediate?: boolean;
 }) {
   const words = text.split(" ").filter(Boolean);
+  const trailingSpace = /\s$/.test(text);
   const trigger = immediate
     ? { animate: "show" as const }
     : { whileInView: "show" as const, viewport: { once: true, margin: "-10% 0px" } };
@@ -40,7 +41,7 @@ export function RevealText({
               transition={{ duration: 1, ease: EASE }}
             >
               {w}
-              {i < words.length - 1 ? "\u00A0" : ""}
+              {i < words.length - 1 || trailingSpace ? "\u00A0" : ""}
             </motion.span>
           </span>
         ))}

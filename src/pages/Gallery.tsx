@@ -1,3 +1,4 @@
+import { Arrow } from "../components/Arrow";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLang } from "../i18n/LanguageContext";
@@ -133,10 +134,10 @@ export default function Gallery() {
               ×
             </button>
             <button type="button" onClick={(e) => { e.stopPropagation(); step(-1); }} className="absolute left-4 top-1/2 hidden h-12 w-12 -translate-y-1/2 rounded-full border border-linen/30 text-linen sm:block" aria-label={g.prev}>
-              ←
+              <Arrow dir="left" className="mx-auto h-5 w-5" />
             </button>
             <button type="button" onClick={(e) => { e.stopPropagation(); step(1); }} className="absolute right-4 top-1/2 hidden h-12 w-12 -translate-y-1/2 rounded-full border border-linen/30 text-linen sm:block" aria-label={g.next}>
-              →
+              <Arrow className="mx-auto h-5 w-5" />
             </button>
             <p className="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs tracking-[0.3em] text-linen/60">
               {index + 1} / {items.length}

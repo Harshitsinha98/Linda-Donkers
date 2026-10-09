@@ -1,3 +1,4 @@
+import { Arrow } from "../components/Arrow";
 import { AnimatePresence, motion, useMotionValue, useScroll, useSpring, useTransform } from "framer-motion";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
@@ -135,13 +136,15 @@ function Intro() {
             alt="Portret van Linda Donkers"
             className="aspect-[4/5] w-[86%] rounded-[1.75rem]"
           />
-          <RevealImage
-            src={IMG.selflove}
-            alt="Self-love meditatie"
-            direction="left"
-            parallax={110}
-            className="absolute -bottom-12 right-0 aspect-[3/4] w-[44%] rounded-[1.25rem] border-[6px] border-cream shadow-2xl"
-          />
+          <div className="absolute -bottom-14 right-0 w-[44%] rounded-[1.4rem] bg-cream p-[6px] shadow-2xl">
+            <RevealImage
+              src={IMG.selflove}
+              alt="Self-love meditatie"
+              direction="left"
+              parallax={40}
+              className="aspect-[3/4] rounded-[1.1rem]"
+            />
+          </div>
         </div>
         <div className="lg:col-span-6 lg:col-start-7">
           <FadeUp>
@@ -222,7 +225,7 @@ function Pillars() {
                 </span>
                 <span className="col-span-1 flex justify-end">
                   <span className="flex h-12 w-12 items-center justify-center rounded-full border border-forest/20 transition-all duration-500 group-hover:rotate-[-45deg] group-hover:border-saffron group-hover:bg-saffron group-hover:text-linen">
-                    →
+                    <Arrow className="h-5 w-5" />
                   </span>
                 </span>
               </Link>
@@ -266,7 +269,7 @@ function Pillars() {
                 </div>
                 <p className="mt-2 text-forest/70">{p.text}</p>
                 <span className="mt-3 inline-block text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-saffron">
-                  {p.cta} →
+                  {p.cta} <Arrow className="ml-1 h-4 w-4 align-[-3px]" />
                 </span>
               </Link>
             </FadeUp>
@@ -325,10 +328,10 @@ function GalleryTeaser() {
   const fast = useTransform(scrollYProgress, [0, 1], [120, -120]);
   const slow = useTransform(scrollYProgress, [0, 1], [40, -40]);
   const imgs = [
-    { src: IMG.happy, cls: "aspect-[4/3] w-[62vw] sm:w-[34vw]", y: slow },
-    { src: IMG.heart, cls: "aspect-[3/4] w-[44vw] sm:w-[22vw]", y: fast },
-    { src: IMG.lomi3, cls: "aspect-[3/4] w-[44vw] sm:w-[20vw]", y: slow },
-    { src: IMG.sari, cls: "aspect-[3/4] w-[44vw] sm:w-[22vw]", y: fast },
+    { src: IMG.happy, cls: "aspect-[4/3] w-[62vw] sm:w-[30vw]", y: slow },
+    { src: IMG.heart, cls: "aspect-[3/4] w-[44vw] sm:w-[19vw]", y: fast },
+    { src: IMG.lomi3, cls: "aspect-[3/4] w-[44vw] sm:w-[17vw]", y: slow },
+    { src: IMG.sari, cls: "aspect-[3/4] w-[44vw] sm:w-[19vw]", y: fast },
   ];
   return (
     <section ref={ref} className="relative overflow-hidden py-28 sm:py-36">

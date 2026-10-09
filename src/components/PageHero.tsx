@@ -37,7 +37,7 @@ export function PageHero({
           >
             {eyebrow}
           </motion.span>
-          <h1 className="display-xl mt-6 text-ink">
+          <h1 className="mt-6 font-display text-[clamp(2.7rem,6.6vw,6.6rem)] font-light leading-[1] text-ink">
             <RevealText text={title} immediate delay={0.25} />
             <RevealText text={accent} immediate delay={0.45} className="italic-accent" />
           </h1>

@@ -1,3 +1,4 @@
+import { Arrow } from "./Arrow";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import { useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -50,11 +51,11 @@ export function Button({ children, to, href, variant = "primary", className = ""
   const inner = (
     <>
       <span
-        className={`absolute inset-0 translate-y-full rounded-[50%] ${fill} transition-[transform,border-radius] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-y-0 group-hover:rounded-none`}
+        className={`absolute inset-0 translate-y-[115%] rounded-[50%] ${fill} transition-[transform,border-radius] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-y-0 group-hover:rounded-none`}
       />
       <span className="relative z-10">{children}</span>
       <span className="relative z-10 transition-transform duration-500 group-hover:translate-x-1" aria-hidden>
-        →
+        <Arrow className="h-4 w-4" />
       </span>
     </>
   );

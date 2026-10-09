@@ -14,7 +14,7 @@ export default function About() {
 
   return (
     <>
-      <PageHero eyebrow={a.eyebrow} title={a.title} accent={a.accent} intro={a.intro} image={IMG.happy} alt="Linda Donkers" position="50% 30%" />
+      <PageHero eyebrow={a.eyebrow} title={a.title} accent={a.accent} intro={a.intro} image={IMG.happy} alt="Linda Donkers" position="50% 0%" />
 
       <section className="py-28 sm:py-40">
         <div className="container-x grid gap-16 lg:grid-cols-12">
@@ -50,7 +50,7 @@ export default function About() {
           <FadeUp>
             <span className="eyebrow">{a.valuesTitle}</span>
           </FadeUp>
-          <div className="mt-14 grid gap-px overflow-hidden rounded-[1.75rem] bg-forest/10 md:grid-cols-3">
+          <div className="mt-14 grid divide-y divide-forest/10 border-y border-forest/10 md:grid-cols-3 md:divide-x md:divide-y-0">
             {a.values.map((v, i) => (
               <FadeUp key={v.title} delay={i * 0.12} className="h-full">
                 <div className="group h-full bg-linen p-10 transition-colors duration-700 hover:bg-forest sm:p-12">

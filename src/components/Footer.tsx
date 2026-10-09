@@ -1,3 +1,4 @@
+import { Arrow } from "./Arrow";
 import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { EMAIL, PHONE_DISPLAY, ROUTES, SOCIALS, WHATSAPP } from "../data/site";
@@ -95,7 +96,7 @@ export function Footer() {
               {t.footer.terms}
             </Link>
             <button type="button" onClick={() => scrollToTop()} className="hover:text-saffron-soft">
-              {t.footer.top} ↑
+              {t.footer.top} <Arrow dir="up" className="ml-1 h-3.5 w-3.5 align-[-2px]" />
             </button>
           </div>
         </div>

@@ -29,7 +29,7 @@ export function LangToggle({ light = false }: { light?: boolean }) {
           {lang === l && (
             <motion.span
               layoutId={light ? "lang-pill-menu" : "lang-pill"}
-              className="absolute inset-0 -z-10 rounded-full bg-forest"
+              className={`absolute inset-0 -z-10 rounded-full ${light ? "bg-saffron" : "bg-forest"}`}
               transition={{ type: "spring", stiffness: 400, damping: 32 }}
             />
           )}

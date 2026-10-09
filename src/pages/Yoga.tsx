@@ -16,7 +16,7 @@ export default function Yoga() {
 
   return (
     <>
-      <PageHero eyebrow={y.eyebrow} title={y.title} accent={y.accent} intro={y.intro} image={IMG.smile} alt="Kundalini Yoga met Linda" position="50% 35%" />
+      <PageHero eyebrow={y.eyebrow} title={y.title} accent={y.accent} intro={y.intro} image={IMG.smile} alt="Kundalini Yoga met Linda" position="50% 0%" />
 
       <section className="py-28 sm:py-40">
         <div className="container-x">
@@ -32,10 +32,10 @@ export default function Yoga() {
                 viewport={{ once: true, margin: "-10% 0px" }}
                 transition={{ duration: 1, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] }}
                 whileHover={{ y: -8 }}
-                className="group relative flex min-h-[260px] flex-col justify-between overflow-hidden rounded-[1.5rem] border border-forest/10 bg-linen p-8"
+                className="group relative flex min-h-[260px] flex-col overflow-hidden rounded-[1.5rem] border border-forest/10 bg-linen p-8"
               >
                 <span className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-sage-soft/50 transition-transform duration-700 group-hover:scale-[4]" />
-                <span className="relative font-display text-5xl font-light text-saffron">0{i + 1}</span>
+                <span className="relative mb-12 font-display text-5xl font-light text-saffron">0{i + 1}</span>
                 <div className="relative">
                   <h3 className="font-display text-2xl text-ink">{el.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-forest/75">{el.text}</p>
