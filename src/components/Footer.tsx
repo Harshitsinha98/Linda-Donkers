@@ -11,6 +11,7 @@ export function Footer() {
     { to: ROUTES.about, label: t.nav.about },
     { to: ROUTES.yoga, label: t.nav.yoga },
     { to: ROUTES.massage, label: t.nav.massage },
+    { to: ROUTES.agenda, label: t.nav.agenda },
     { to: ROUTES.travel, label: t.nav.travel },
     { to: ROUTES.gallery, label: t.nav.gallery },
     { to: ROUTES.contact, label: t.nav.contact },
@@ -18,7 +19,7 @@ export function Footer() {
 
   return (
     <footer className="relative overflow-hidden bg-ink text-linen">
-      <div className="container-x pb-10 pt-24">
+      <div className="container-x pb-28 pt-24 lg:pb-10">
         <div className="grid gap-14 lg:grid-cols-12">
           <div className="lg:col-span-5">
             <LogoMark className="h-14 w-14 text-linen" strokeWidth={2.6} />

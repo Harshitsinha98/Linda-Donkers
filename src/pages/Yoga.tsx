@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { useLang } from "../i18n/LanguageContext";
-import { IMG, YOUTUBE } from "../data/site";
+import { Link } from "react-router-dom";
+import { IMG, ROUTES, YOUTUBE } from "../data/site";
+import { Arrow } from "../components/Arrow";
 import { PageHero } from "../components/PageHero";
 import { FadeUp, RevealImage, RevealText } from "../components/Reveal";
 import { Gong } from "../components/Gong";
@@ -88,7 +90,9 @@ export default function Yoga() {
                 </FadeUp>
               ))}
               <FadeUp>
-                <p className="mt-8 text-sm font-semibold uppercase tracking-[0.16em] text-saffron">{y.offerNote}</p>
+                <Link to={`${ROUTES.agenda}?cat=yoga`} className="mt-8 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-saffron hover:text-forest">
+                  {y.offerNote} <Arrow className="h-4 w-4" />
+                </Link>
               </FadeUp>
             </div>
           </div>

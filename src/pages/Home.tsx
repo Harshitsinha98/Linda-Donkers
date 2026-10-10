@@ -15,6 +15,7 @@ import { CtaStrip } from "../components/CtaStrip";
 import { Filmstrip } from "../components/gallery/Filmstrip";
 import { ParallaxFrames } from "../components/gallery/ParallaxFrames";
 import { usePageTitle } from "../components/usePageTitle";
+import { UpcomingSessions } from "../components/sessions/UpcomingSessions";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -106,7 +107,7 @@ function Hero() {
         >
           <p className="lead max-w-md">{t.home.heroSub}</p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Button to={ROUTES.contact}>{t.home.heroCta}</Button>
+            <Button to={ROUTES.agenda}>{t.home.heroCta}</Button>
             <Link
               to={ROUTES.yoga}
               className="group inline-flex items-center gap-2 px-2 py-3 text-[0.8rem] font-semibold uppercase tracking-[0.16em] text-forest"
@@ -158,6 +159,7 @@ function Intro() {
           </h2>
           <FadeUp delay={0.2}>
             <p className="lead mt-8 max-w-xl">{t.home.introText}</p>
+            <p className="lead mt-5 max-w-xl">{t.home.introText2}</p>
             <div className="mt-10">
               <Button to={ROUTES.about} variant="ghost">
                 {t.home.introLink}
@@ -362,6 +364,7 @@ export default function Home() {
     <>
       <Hero />
       <Marquee items={t.home.marquee} />
+      <UpcomingSessions />
       <Intro />
       <Pillars />
       <Filmstrip />
