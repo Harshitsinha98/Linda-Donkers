@@ -67,6 +67,7 @@ export function Header() {
     { to: ROUTES.about, label: t.nav.about },
     { to: ROUTES.yoga, label: t.nav.yoga },
     { to: ROUTES.massage, label: t.nav.massage },
+    { to: ROUTES.agenda, label: t.nav.agenda },
     { to: ROUTES.travel, label: t.nav.travel },
     { to: ROUTES.gallery, label: t.nav.gallery },
     { to: ROUTES.contact, label: t.nav.contact },
@@ -90,7 +91,7 @@ export function Header() {
             </Link>
 
             <nav className="hidden items-center gap-1 xl:flex" aria-label="Hoofdmenu">
-              {links.slice(0, 5).map((l) => (
+              {links.slice(0, 6).map((l) => (
                 <NavLink
                   key={l.to}
                   to={l.to}
@@ -120,7 +121,7 @@ export function Header() {
               </div>
               <Magnetic>
                 <Link
-                  to={ROUTES.contact}
+                  to={ROUTES.agenda}
                   className="hidden rounded-full bg-forest px-5 py-3 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-linen transition-colors duration-300 hover:bg-saffron lg:inline-flex"
                 >
                   {t.nav.book}

@@ -1,6 +1,8 @@
 export const EMAIL = "info@lindadonkers.com";
 export const WHATSAPP = "32498142845"; // international format, no "+"
 export const PHONE_DISPLAY = "+32 498 14 28 45";
+export const PHONE_TEL = `tel:+${WHATSAPP}`;
+export const waLink = (text?: string) => `https://wa.me/${WHATSAPP}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 
 export const SOCIALS = [
   { name: "Instagram", href: "https://www.instagram.com/diamondyoga_goldenhands" },
@@ -17,6 +19,9 @@ export const ROUTES = {
   about: "/over-linda",
   yoga: "/kundalini-yoga",
   massage: "/massage",
+  agenda: "/agenda",
+  booking: "/boeking",
+  admin: "/admin",
   travel: "/reizen",
   gallery: "/galerij",
   contact: "/contact",

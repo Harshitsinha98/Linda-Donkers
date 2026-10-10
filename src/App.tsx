@@ -8,6 +8,7 @@ import { SmoothScroll, scrollToTop } from "./components/SmoothScroll";
 import { Cursor } from "./components/Cursor";
 import { IntroContext } from "./components/IntroContext";
 import { LogoMark } from "./components/Logo";
+import { MobileBar } from "./components/MobileBar";
 import { ROUTES } from "./data/site";
 import Home from "./pages/Home";
 
@@ -18,6 +19,10 @@ const Travel = lazy(() => import("./pages/Travel"));
 const Gallery = lazy(() => import("./pages/Gallery"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Legal = lazy(() => import("./pages/Legal"));
+const Agenda = lazy(() => import("./pages/Agenda"));
+const SessionDetail = lazy(() => import("./pages/SessionDetail"));
+const BookingStatus = lazy(() => import("./pages/BookingStatus"));
+const AdminApp = lazy(() => import("./admin/AdminApp"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const EASE = [0.76, 0, 0.24, 1] as const;
@@ -44,6 +49,19 @@ function Page({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const location = useLocation();
+  // Linda's admin panel is a plain tool: no preloader, smooth scroll, custom cursor or site chrome.
+  if (location.pathname.startsWith(ROUTES.admin)) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-cream" />}>
+        <AdminApp />
+      </Suspense>
+    );
+  }
+  return <Site />;
+}
+
+function Site() {
+  const location = useLocation();
   const [ready, setReady] = useState(false);
   const onReady = useCallback(() => setReady(true), []);
 
@@ -61,6 +79,9 @@ export default function App() {
               <Route path={ROUTES.about} element={<Page><About /></Page>} />
               <Route path={ROUTES.yoga} element={<Page><Yoga /></Page>} />
               <Route path={ROUTES.massage} element={<Page><Massage /></Page>} />
+              <Route path={ROUTES.agenda} element={<Page><Agenda /></Page>} />
+              <Route path={`${ROUTES.agenda}/:id`} element={<Page><SessionDetail /></Page>} />
+              <Route path={`${ROUTES.booking}/:ref`} element={<Page><BookingStatus /></Page>} />
               <Route path={ROUTES.travel} element={<Page><Travel /></Page>} />
               <Route path={ROUTES.gallery} element={<Page><Gallery /></Page>} />
               <Route path={ROUTES.contact} element={<Page><Contact /></Page>} />
@@ -72,6 +93,7 @@ export default function App() {
         </AnimatePresence>
       </main>
       <Footer />
+      <MobileBar />
     </IntroContext.Provider>
   );
 }

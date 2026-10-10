@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { ROUTES } from "../data/site";
 import { Button } from "./Magnetic";
@@ -19,8 +20,11 @@ export function CtaStrip() {
         </h2>
         <FadeUp delay={0.3}>
           <p className="mx-auto mt-6 max-w-md text-lg text-linen/70">{t.cta.text}</p>
-          <div className="mt-10">
-            <Button to={ROUTES.contact}>{t.cta.button}</Button>
+          <div className="mt-10 flex flex-col items-center gap-5">
+            <Button to={ROUTES.agenda}>{t.cta.button}</Button>
+            <Link to={ROUTES.contact} className="text-sm font-semibold text-linen/70 underline underline-offset-4 hover:text-saffron-soft">
+              {t.cta.secondary}
+            </Link>
           </div>
         </FadeUp>
       </div>

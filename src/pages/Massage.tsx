@@ -1,7 +1,8 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { useLang } from "../i18n/LanguageContext";
-import { IMG } from "../data/site";
+import { IMG, ROUTES, waLink } from "../data/site";
+import { Button } from "../components/Magnetic";
 import { PageHero } from "../components/PageHero";
 import { FadeUp, RevealImage, RevealText } from "../components/Reveal";
 import { ScrollWords } from "../components/ScrollWords";
@@ -34,26 +35,45 @@ export default function Massage() {
 
   return (
     <>
-      <PageHero eyebrow={m.eyebrow} title={m.title} accent={m.accent} intro={m.intro} image={IMG.lomi1} alt="Lomi Lomi Nui massage" position="50% 40%" />
+      <PageHero eyebrow={m.eyebrow} title={m.title} accent={m.accent} intro={m.intro} image={IMG.lomi1} alt="Holistische massage door Linda" position="50% 40%" />
 
       <Waves />
 
       <section className="pb-28 pt-10 sm:pb-40">
         <div className="container-x">
           <FadeUp>
-            <span className="eyebrow">{m.whatTitle}</span>
+            <span className="eyebrow">{m.listTitle}</span>
           </FadeUp>
-          <div className="mt-14 grid gap-8 md:grid-cols-3">
-            {m.what.map((w, i) => (
-              <FadeUp key={w.title} delay={i * 0.12}>
-                <div className="relative">
-                  <span className="font-display text-[7rem] font-light leading-none text-sand">0{i + 1}</span>
-                  <h3 className="-mt-10 font-display text-4xl font-light text-ink">{w.title}</h3>
-                  <p className="mt-4 text-forest/70">{w.text}</p>
-                </div>
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
+            {m.treatments.map((tr, i) => (
+              <FadeUp key={tr.key} delay={(i % 2) * 0.12} className="h-full">
+                <article className="relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-forest/10 bg-linen p-7 sm:p-9">
+                  <span className="pointer-events-none absolute -right-2 -top-6 font-display text-[7rem] font-light leading-none text-sand">0{i + 1}</span>
+                  <div className="relative flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-forest px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.16em] text-linen">{tr.duration}</span>
+                    {tr.online && (
+                      <span className="rounded-full border border-saffron px-3 py-1 text-[0.7rem] font-bold uppercase tracking-[0.16em] text-saffron">{m.onlineTag}</span>
+                    )}
+                  </div>
+                  <h3 className="relative mt-6 font-display text-[clamp(1.8rem,2.6vw,2.4rem)] font-light leading-tight text-ink">{tr.name}</h3>
+                  {tr.sub && <p className="relative mt-1 font-display text-lg italic text-saffron">{tr.sub}</p>}
+                  <div className="relative mt-5 space-y-3 text-forest/75">
+                    {tr.text.map((line) => (
+                      <p key={line}>{line}</p>
+                    ))}
+                  </div>
+                </article>
               </FadeUp>
             ))}
           </div>
+          <FadeUp delay={0.2}>
+            <div className="mt-12 flex flex-wrap items-center gap-4">
+              <Button to={`${ROUTES.agenda}?cat=massage`}>{m.bookCta}</Button>
+              <Button href={waLink(m.askText)} variant="ghost">
+                {m.askCta}
+              </Button>
+            </div>
+          </FadeUp>
         </div>
       </section>
 
@@ -76,7 +96,9 @@ export default function Massage() {
             <RevealText text={m.forText} stagger={0.025} />
           </h2>
           <FadeUp delay={0.3}>
-            <p className="mt-10 text-sm font-semibold uppercase tracking-[0.16em] text-saffron">{m.note}</p>
+            <div className="mt-10 flex justify-center">
+              <Button to={`${ROUTES.agenda}?cat=massage`}>{m.bookCta}</Button>
+            </div>
           </FadeUp>
         </div>
       </section>
