@@ -7,7 +7,7 @@ import { Logo } from "./Logo";
 import { Magnetic } from "./Magnetic";
 import { setScrollLocked } from "./SmoothScroll";
 
-export function LangToggle({ light = false }: { light?: boolean }) {
+export function LangToggle({ light = false, compact = false }: { light?: boolean; compact?: boolean }) {
   const { lang, setLang, t } = useLang();
   return (
     <div
@@ -23,12 +23,12 @@ export function LangToggle({ light = false }: { light?: boolean }) {
           type="button"
           onClick={() => setLang(l)}
           aria-pressed={lang === l}
-          className="relative z-10 rounded-full px-3 py-1.5 uppercase transition-colors duration-300"
+          className={`relative z-10 rounded-full uppercase transition-colors duration-300 ${compact ? "px-2.5 py-1" : "px-3 py-1.5"}`}
           style={{ color: lang === l ? "var(--color-linen)" : undefined }}
         >
           {lang === l && (
             <motion.span
-              layoutId={light ? "lang-pill-menu" : "lang-pill"}
+              layoutId={light ? "lang-pill-menu" : compact ? "lang-pill-sm" : "lang-pill"}
               className={`absolute inset-0 -z-10 rounded-full ${light ? "bg-saffron" : "bg-forest"}`}
               transition={{ type: "spring", stiffness: 400, damping: 32 }}
             />
@@ -115,7 +115,10 @@ export function Header() {
               ))}
             </nav>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="sm:hidden">
+                <LangToggle compact />
+              </div>
               <div className="hidden sm:block">
                 <LangToggle />
               </div>
@@ -196,7 +199,6 @@ export function Header() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.7 }}
             >
-              <LangToggle light />
               <a href={`mailto:${EMAIL}`} className="hover:text-saffron-soft">
                 {EMAIL}
               </a>

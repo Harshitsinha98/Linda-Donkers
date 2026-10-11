@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
-import { PHONE_TEL, ROUTES, waLink } from "../data/site";
+import { EMAIL, PHONE_TEL, ROUTES, waLink } from "../data/site";
 
 export function WhatsAppIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -19,7 +19,16 @@ function PhoneIcon() {
   );
 }
 
-/** Thumb-reach actions on phones: Call, WhatsApp, Book a session. Hidden while booking. */
+function MailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="m4 7 8 6 8-6" />
+    </svg>
+  );
+}
+
+/** Thumb-reach actions on phones: Call, WhatsApp, Email, Book a session. Hidden while booking. */
 export function MobileBar() {
   const { t } = useLang();
   const { pathname } = useLocation();
@@ -44,11 +53,11 @@ export function MobileBar() {
   return (
     <div
       aria-hidden={!show}
-      className={`fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 flex gap-2 rounded-full bg-ink/95 p-1.5 shadow-[0_18px_40px_-12px_rgba(29,36,30,0.55)] backdrop-blur transition-[transform,opacity] duration-500 lg:hidden ${
+      className={`fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 flex gap-1 rounded-full bg-ink/95 p-1.5 shadow-[0_18px_40px_-12px_rgba(29,36,30,0.55)] backdrop-blur transition-[transform,opacity] duration-500 lg:hidden ${
         show ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-[calc(100%+1.5rem)] opacity-0"
       }`}
     >
-      <a href={PHONE_TEL} aria-label={t.mobileBar.call} tabIndex={show ? 0 : -1} className="grid h-12 w-12 place-items-center rounded-full text-linen">
+      <a href={PHONE_TEL} aria-label={t.mobileBar.call} tabIndex={show ? 0 : -1} className="grid h-12 w-11 shrink-0 place-items-center rounded-full text-linen">
         <PhoneIcon />
       </a>
       <a
@@ -57,14 +66,17 @@ export function MobileBar() {
         rel="noopener noreferrer"
         aria-label={t.mobileBar.whatsapp}
         tabIndex={show ? 0 : -1}
-        className="grid h-12 w-12 place-items-center rounded-full text-linen"
+        className="grid h-12 w-11 shrink-0 place-items-center rounded-full text-linen"
       >
         <WhatsAppIcon />
+      </a>
+      <a href={`mailto:${EMAIL}`} aria-label={t.mobileBar.email} tabIndex={show ? 0 : -1} className="grid h-12 w-11 shrink-0 place-items-center rounded-full text-linen">
+        <MailIcon />
       </a>
       <Link
         to={ROUTES.agenda}
         tabIndex={show ? 0 : -1}
-        className="flex flex-1 items-center justify-center rounded-full bg-saffron text-[0.95rem] font-semibold text-linen"
+        className="flex flex-1 items-center justify-center rounded-full bg-saffron whitespace-nowrap px-3 text-[0.92rem] font-semibold text-linen"
       >
         {t.mobileBar.book}
       </Link>
