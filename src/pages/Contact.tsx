@@ -8,6 +8,7 @@ import { FadeUp, RevealText } from "../components/Reveal";
 import { Button } from "../components/Magnetic";
 import { BreathingCircle } from "../components/Breathing";
 import { usePageTitle } from "../components/usePageTitle";
+import { SocialGlyph } from "../components/SocialLinks";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -140,9 +141,17 @@ export default function Contact() {
               <span className="eyebrow">{c.socials}</span>
               <ul className="mt-5 divide-y divide-forest/10 border-y border-forest/10">
                 {SOCIALS.map((s) => (
-                  <li key={s.name}>
-                    <a href={s.href} target="_blank" rel="noreferrer" className="group flex items-center justify-between py-4 text-forest transition-colors hover:text-saffron">
-                      <span className="font-display text-xl">{s.name}</span>
+                  <li key={s.href}>
+                    <a href={s.href} target="_blank" rel="noreferrer" className="group flex items-center justify-between gap-4 py-4 text-forest transition-colors hover:text-saffron">
+                      <span className="flex min-w-0 items-center gap-4">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-forest text-linen transition-colors group-hover:bg-saffron">
+                          <SocialGlyph icon={s.icon} className="h-[1.1rem] w-[1.1rem]" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[0.65rem] font-bold uppercase tracking-[0.2em] text-sage">{s.name}</span>
+                          <span className="block truncate font-display text-lg">{s.label}</span>
+                        </span>
+                      </span>
                       <span className="transition-transform duration-500 group-hover:-rotate-45"><Arrow className="h-5 w-5" /></span>
                     </a>
                   </li>

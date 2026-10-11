@@ -4,13 +4,18 @@ export const PHONE_DISPLAY = "+32 498 14 28 45";
 export const PHONE_TEL = `tel:+${WHATSAPP}`;
 export const waLink = (text?: string) => `https://wa.me/${WHATSAPP}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 
-export const SOCIALS = [
-  { name: "Instagram", href: "https://www.instagram.com/diamondyoga_goldenhands" },
-  { name: "YouTube", href: "https://youtube.com/@lindadonkers1580" },
-  { name: "Facebook", href: "https://www.facebook.com/share/1DzxDT9dpc/" },
-  { name: "LinkedIn", href: "https://www.linkedin.com/in/linda-donkers-454ab1b5" },
-  { name: "Threads", href: "https://www.threads.net/@diamondyoga_goldenhands" },
-] as const;
+export type SocialIcon = "instagram" | "youtube" | "facebook" | "linkedin" | "threads";
+
+/** All of Linda's channels. `label` is the page name shown next to the icon. */
+export const SOCIALS: { name: string; label: string; icon: SocialIcon; href: string }[] = [
+  { name: "Instagram", label: "@diamondyoga_goldenhands", icon: "instagram", href: "https://www.instagram.com/diamondyoga_goldenhands" },
+  { name: "Facebook", label: "Diamond Yoga", icon: "facebook", href: "https://www.facebook.com/kundalinda62" },
+  { name: "Facebook", label: "2LovingHands", icon: "facebook", href: "https://www.facebook.com/2lovinghands" },
+  { name: "Facebook", label: "Linda Donkers", icon: "facebook", href: "https://www.facebook.com/Kundalinda" },
+  { name: "YouTube", label: "@lindadonkers1580", icon: "youtube", href: "https://youtube.com/@lindadonkers1580" },
+  { name: "LinkedIn", label: "Linda Donkers", icon: "linkedin", href: "https://www.linkedin.com/in/linda-donkers-454ab1b5" },
+  { name: "Threads", label: "@diamondyoga_goldenhands", icon: "threads", href: "https://www.threads.net/@diamondyoga_goldenhands" },
+];
 
 export const YOUTUBE = "https://youtube.com/@lindadonkers1580";
 
