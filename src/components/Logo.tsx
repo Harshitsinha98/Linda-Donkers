@@ -35,11 +35,11 @@ export function LogoMark({ className = "h-9 w-9", draw = false, strokeWidth = 3.
 
 export function Logo({ light = false }: { light?: boolean }) {
   return (
-    <span className={`flex items-center gap-3 ${light ? "text-linen" : "text-ink"}`}>
-      <LogoMark className="h-9 w-9" />
+    <span className={`flex items-center gap-2 sm:gap-3 ${light ? "text-linen" : "text-ink"}`}>
+      <LogoMark className="h-8 w-8 shrink-0 sm:h-9 sm:w-9" />
       <span className="flex flex-col leading-none">
-        <span className="font-display text-[1.25rem] tracking-tight">Linda Donkers</span>
-        <span className="mt-1 text-[0.58rem] font-semibold uppercase tracking-[0.34em] opacity-60">Diamond Yoga</span>
+        <span className="whitespace-nowrap font-display text-[1.1rem] tracking-tight sm:text-[1.25rem]">Linda Donkers</span>
+        <span className="mt-1 whitespace-nowrap text-[0.52rem] font-semibold uppercase tracking-[0.3em] opacity-60 sm:text-[0.58rem] sm:tracking-[0.34em]">Diamond Yoga</span>
       </span>
     </span>
   );

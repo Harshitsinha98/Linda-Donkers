@@ -131,15 +131,18 @@ function Hero() {
 function Intro() {
   const { t } = useLang();
   return (
-    <section className="relative py-28 sm:py-40">
-      <div className="container-x grid items-center gap-16 lg:grid-cols-12">
+    <section className="relative overflow-hidden bg-gradient-to-b from-lavender via-[#efe9f4] to-lavender py-28 sm:py-40">
+      {/* soft lavender glows so the colour feels like light rather than a flat block */}
+      <div aria-hidden className="pointer-events-none absolute -left-40 top-10 h-[34rem] w-[34rem] rounded-full bg-lavender-deep/70 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -right-32 bottom-0 h-[28rem] w-[28rem] rounded-full bg-[#f6e3d3]/70 blur-3xl" />
+      <div className="container-x relative grid items-center gap-16 lg:grid-cols-12">
         <div className="relative lg:col-span-5">
           <RevealImage
             src={IMG.portrait}
             alt="Portret van Linda Donkers"
             className="aspect-[4/5] w-[86%] rounded-[1.75rem]"
           />
-          <div className="absolute -bottom-14 right-0 w-[44%] rounded-[1.4rem] bg-cream p-[6px] shadow-2xl">
+          <div className="absolute -bottom-14 right-0 w-[44%] rounded-[1.4rem] bg-linen p-[6px] shadow-[0_30px_60px_-25px_rgba(74,55,100,0.45)]">
             <RevealImage
               src={IMG.selflove}
               alt="Self-love meditatie"
@@ -151,15 +154,15 @@ function Intro() {
         </div>
         <div className="lg:col-span-6 lg:col-start-7">
           <FadeUp>
-            <span className="eyebrow">{t.home.introEyebrow}</span>
+            <span className="eyebrow text-plum">{t.home.introEyebrow}</span>
           </FadeUp>
           <h2 className="display-lg mt-6 text-ink">
             <RevealText text={t.home.introTitle} />
             <RevealText text={t.home.introAccent} className="italic-accent" delay={0.25} />
           </h2>
           <FadeUp delay={0.2}>
-            <p className="lead mt-8 max-w-xl">{t.home.introText}</p>
-            <p className="lead mt-5 max-w-xl">{t.home.introText2}</p>
+            <p className="lead mt-8 max-w-xl text-ink/80">{t.home.introText}</p>
+            <p className="lead mt-5 max-w-xl text-ink/80">{t.home.introText2}</p>
             <div className="mt-10">
               <Button to={ROUTES.about} variant="ghost">
                 {t.home.introLink}

@@ -35,6 +35,7 @@ const nl = {
   },
   mobileBar: {
     call: "Bel Linda",
+    email: "Mail Linda",
     whatsapp: "WhatsApp Linda",
     whatsappText: "Hallo Linda, ik heb een vraag over een sessie.",
     book: "Boek een sessie",
@@ -42,7 +43,7 @@ const nl = {
   preloader: "Adem in",
   home: {
     heroEyebrow: "Diamond Yoga · Deurne, Antwerpen",
-    heroTitle: ["Open je", "hart,", "vind je", "licht."],
+    heroTitle: ["Open je", "hart,", "wees het", "licht."],
     heroSub:
       "Kundalini Yoga, gongmeditatie en holistische massages. Een warme plek om te ademen, te voelen en weer thuis te komen in jezelf.",
     heroCta: "Boek een sessie",
@@ -57,7 +58,7 @@ const nl = {
     introTitle: "Linda helpt je terug te keren naar je ",
     introAccent: "eigen kracht.",
     introText:
-      "Linda Donkers helpt mensen om te vertragen, goed voor zichzelf te zorgen, hun lichaam te ontspannen en meer rust te vinden in hun dagelijkse leven.",
+      "Linda helpt mensen om te vertragen, goed voor zichzelf te zorgen, hun lichaam te ontspannen en meer rust te vinden in hun dagelijkse leven.",
     introText2:
       "Haar werk draait om tijd maken voor jezelf, de verbinding met je lichaam en geest versterken, en ruimte creëren voor ontspanning en persoonlijk welzijn.",
     introLink: "Lees haar verhaal",
@@ -487,6 +488,7 @@ const en: Content = {
   },
   mobileBar: {
     call: "Call Linda",
+    email: "Email Linda",
     whatsapp: "WhatsApp Linda",
     whatsappText: "Hello Linda, I have a question about a session.",
     book: "Book a session",
@@ -494,7 +496,7 @@ const en: Content = {
   preloader: "Breathe in",
   home: {
     heroEyebrow: "Diamond Yoga · Deurne, Antwerp",
-    heroTitle: ["Open your", "heart,", "find your", "light."],
+    heroTitle: ["Open your", "heart,", "be the", "light."],
     heroSub:
       "Kundalini Yoga, gong meditation and holistic massages. A warm place to breathe, to feel, and to come home to yourself.",
     heroCta: "Book a session",
@@ -509,7 +511,7 @@ const en: Content = {
     introTitle: "Linda helps you return to your ",
     introAccent: "own strength.",
     introText:
-      "In simple words, Linda Donkers helps people discover ways to slow down, take care of themselves, relax their bodies, and find more peace in their daily lives.",
+      "In simple words, Linda helps people discover ways to slow down, take care of themselves, relax their bodies, and find more peace in their daily lives.",
     introText2:
       "Her work is about making time for yourself, improving your connection with your body and mind, and creating space for relaxation and personal well-being.",
     introLink: "Read her story",
