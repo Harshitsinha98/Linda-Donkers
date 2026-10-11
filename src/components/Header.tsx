@@ -2,10 +2,11 @@ import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "framer-
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
-import { ROUTES, EMAIL, SOCIALS } from "../data/site";
+import { ROUTES, EMAIL } from "../data/site";
 import { Logo } from "./Logo";
 import { Magnetic } from "./Magnetic";
 import { setScrollLocked } from "./SmoothScroll";
+import { SocialIcons } from "./SocialLinks";
 
 export function LangToggle({ light = false, compact = false }: { light?: boolean; compact?: boolean }) {
   const { lang, setLang, t } = useLang();
@@ -202,13 +203,7 @@ export function Header() {
               <a href={`mailto:${EMAIL}`} className="hover:text-saffron-soft">
                 {EMAIL}
               </a>
-              <div className="flex gap-4">
-                {SOCIALS.slice(0, 3).map((s) => (
-                  <a key={s.name} href={s.href} target="_blank" rel="noreferrer" className="hover:text-saffron-soft">
-                    {s.name}
-                  </a>
-                ))}
-              </div>
+              <SocialIcons tone="dark" size="sm" />
             </motion.div>
           </motion.div>
         )}

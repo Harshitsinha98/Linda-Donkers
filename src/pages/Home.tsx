@@ -16,6 +16,7 @@ import { Filmstrip } from "../components/gallery/Filmstrip";
 import { ParallaxFrames } from "../components/gallery/ParallaxFrames";
 import { usePageTitle } from "../components/usePageTitle";
 import { UpcomingSessions } from "../components/sessions/UpcomingSessions";
+import { SocialCards } from "../components/SocialLinks";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -361,6 +362,33 @@ function GalleryTeaser() {
   );
 }
 
+function Follow() {
+  const { t } = useLang();
+  return (
+    <section className="relative border-t border-forest/10 bg-sand/40 py-24 sm:py-32" aria-labelledby="follow-title">
+      <div className="container-x">
+        <div className="max-w-2xl">
+          <FadeUp>
+            <span className="eyebrow">{t.home.followEyebrow}</span>
+          </FadeUp>
+          <h2 id="follow-title" className="display-lg mt-6 text-ink">
+            <RevealText text={t.home.followTitle} />
+            <RevealText text={t.home.followAccent} className="italic-accent" delay={0.2} />
+          </h2>
+          <FadeUp delay={0.15}>
+            <p className="lead mt-5">{t.home.followText}</p>
+          </FadeUp>
+        </div>
+        <FadeUp delay={0.2}>
+          <div className="mt-12">
+            <SocialCards />
+          </div>
+        </FadeUp>
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const { t } = useLang();
   usePageTitle(t.meta.home);
@@ -375,6 +403,7 @@ export default function Home() {
       <Breathe />
       <Quote />
       <GalleryTeaser />
+      <Follow />
       <CtaStrip />
     </>
   );

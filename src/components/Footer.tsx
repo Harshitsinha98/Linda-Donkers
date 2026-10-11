@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { EMAIL, PHONE_DISPLAY, ROUTES, SOCIALS, WHATSAPP } from "../data/site";
 import { LogoMark } from "./Logo";
+import { SocialIcons } from "./SocialLinks";
 import { scrollToTop } from "./SmoothScroll";
 
 export function Footer() {
@@ -26,6 +27,7 @@ export function Footer() {
             <p className="mt-6 max-w-sm font-display text-2xl font-light leading-snug text-linen/90">
               {t.footer.tagline}
             </p>
+            <SocialIcons tone="dark" className="mt-8" />
           </div>
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-3 lg:col-span-7">
             <div>
@@ -66,9 +68,9 @@ export function Footer() {
               </h3>
               <ul className="mt-5 space-y-3 text-sm text-linen/70">
                 {SOCIALS.map((s) => (
-                  <li key={s.name}>
+                  <li key={s.href}>
                     <a href={s.href} target="_blank" rel="noreferrer" className="hover:text-linen">
-                      {s.name}
+                      {s.name === "Facebook" ? `Facebook · ${s.label}` : s.name}
                     </a>
                   </li>
                 ))}
