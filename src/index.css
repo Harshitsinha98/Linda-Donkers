@@ -10,9 +10,12 @@
   --color-ink: #1d241e;
   --color-saffron: #e8762b;
   --color-saffron-soft: #f5b27c;
-  --color-lavender: #ece5f3;
-  --color-lavender-deep: #d9cce8;
-  --color-plum: #6e5a86;
+  /* deep aubergine night + neon purple/magenta glow (the "be the light" moment) */
+  --color-plum-night: #1c1024;
+  --color-plum-deep: #2a163a;
+  --color-neon: #c026d3;
+  --color-neon-soft: #e879f9;
+  --color-lilac: #e9d5ff;
 
   --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
   --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -70,6 +73,9 @@
   .eyebrow::before {
     content: "";
     @apply block h-px w-8 bg-saffron;
+  }
+  .eyebrow.eyebrow-neon::before {
+    background: var(--color-neon-soft);
   }
   .display-xl {
     @apply font-display leading-[0.95];
