@@ -16,6 +16,11 @@
   --color-neon: #c026d3;
   --color-neon-soft: #e879f9;
   --color-lilac: #e9d5ff;
+  /* soft lavender palette (welcome / intro section) */
+  --color-lavender: #ede6f7;
+  --color-lavender-deep: #ddd0f0;
+  --color-violet: #6d3fa8;
+  --color-aubergine: #2e1a47;
 
   --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
   --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -76,6 +81,9 @@
   }
   .eyebrow.eyebrow-neon::before {
     background: var(--color-neon-soft);
+  }
+  .eyebrow.eyebrow-violet::before {
+    background: var(--color-violet);
   }
   .display-xl {
     @apply font-display leading-[0.95];
