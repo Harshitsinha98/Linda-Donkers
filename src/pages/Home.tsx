@@ -132,19 +132,18 @@ function Hero() {
 function Intro() {
   const { t } = useLang();
   return (
-    <section className="relative overflow-hidden bg-plum-night py-28 text-lilac sm:py-40">
-      {/* neon purple glows, like a light in a dark room */}
-      <div aria-hidden className="pointer-events-none absolute -left-32 top-0 h-[36rem] w-[36rem] rounded-full bg-neon/25 blur-[120px]" />
-      <div aria-hidden className="pointer-events-none absolute -right-24 bottom-0 h-[30rem] w-[30rem] rounded-full bg-[#7e22ce]/30 blur-[120px]" />
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-neon/40 to-transparent" />
-      <div className="container-x relative grid items-center gap-16 lg:grid-cols-12">
-        <div className="relative lg:col-span-5">
+    <section className="relative overflow-hidden bg-lavender py-28 text-aubergine sm:py-40">
+      {/* soft lavender light washes */}
+      <div aria-hidden className="pointer-events-none absolute -left-40 -top-20 h-[34rem] w-[34rem] rounded-full bg-white/60 blur-[110px]" />
+      <div aria-hidden className="pointer-events-none absolute -right-32 bottom-0 h-[30rem] w-[30rem] rounded-full bg-lavender-deep blur-[110px]" />
+      <div className="container-x relative grid items-center gap-20 lg:grid-cols-12 lg:gap-16">
+        <div className="relative pb-14 lg:col-span-5 lg:pb-0">
           <RevealImage
             src={IMG.portrait}
             alt="Portret van Linda Donkers"
-            className="aspect-[4/5] w-[86%] rounded-[1.75rem] ring-1 ring-neon-soft/20"
+            className="aspect-[4/5] w-[82%] rounded-[1.75rem] shadow-[0_30px_60px_-30px_rgba(46,26,71,0.45)]"
           />
-          <div className="absolute -bottom-14 right-0 w-[44%] rounded-[1.4rem] bg-plum-deep p-[6px] shadow-[0_30px_70px_-20px_rgba(192,38,211,0.55)]">
+          <div className="absolute -bottom-2 right-0 w-[42%] rounded-[1.4rem] bg-lavender p-[7px] shadow-[0_30px_60px_-24px_rgba(46,26,71,0.5)] lg:-bottom-14">
             <RevealImage
               src={IMG.selflove}
               alt="Self-love meditatie"
@@ -156,17 +155,17 @@ function Intro() {
         </div>
         <div className="lg:col-span-6 lg:col-start-7">
           <FadeUp>
-            <span className="eyebrow eyebrow-neon text-neon-soft">{t.home.introEyebrow}</span>
+            <span className="eyebrow eyebrow-violet text-violet">{t.home.introEyebrow}</span>
           </FadeUp>
-          <h2 className="display-lg mt-6 text-neon-soft [text-shadow:0_0_28px_rgba(232,121,249,0.45)]">
+          <h2 className="mt-6 font-display text-[clamp(2.4rem,5vw,4.5rem)] font-normal leading-[1.06] text-aubergine">
             <RevealText text={t.home.introTitle} />
-            <RevealText text={t.home.introAccent} className="font-display italic text-neon [text-shadow:0_0_32px_rgba(192,38,211,0.6)]" delay={0.25} />
+            <RevealText text={t.home.introAccent} className="italic-accent text-violet" delay={0.25} />
           </h2>
           <FadeUp delay={0.2}>
-            <p className="lead mt-8 max-w-xl text-lilac/85">{t.home.introText}</p>
-            <p className="lead mt-5 max-w-xl text-lilac/85">{t.home.introText2}</p>
+            <p className="mt-8 max-w-xl text-[1.05rem] leading-[1.85] text-aubergine/75 sm:text-[1.125rem]">{t.home.introText}</p>
+            <p className="mt-5 max-w-xl text-[1.05rem] leading-[1.85] text-aubergine/75 sm:text-[1.125rem]">{t.home.introText2}</p>
             <div className="mt-10">
-              <Button to={ROUTES.about} variant="light">
+              <Button to={ROUTES.about} variant="violet">
                 {t.home.introLink}
               </Button>
             </div>

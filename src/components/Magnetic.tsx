@@ -31,7 +31,7 @@ type BtnProps = {
   children: ReactNode;
   to?: string;
   href?: string;
-  variant?: "primary" | "ghost" | "light";
+  variant?: "primary" | "ghost" | "light" | "violet";
   className?: string;
   onClick?: () => void;
   type?: "button" | "submit";
@@ -45,8 +45,9 @@ export function Button({ children, to, href, variant = "primary", className = ""
     primary: "bg-saffron text-linen",
     ghost: "border border-forest/25 text-forest hover:text-linen",
     light: "border border-linen/40 text-linen hover:text-ink",
+    violet: "border border-violet/35 text-aubergine hover:text-linen",
   }[variant];
-  const fill = { primary: "bg-forest", ghost: "bg-forest", light: "bg-linen" }[variant];
+  const fill = { primary: "bg-forest", ghost: "bg-forest", light: "bg-linen", violet: "bg-violet" }[variant];
 
   const inner = (
     <>
