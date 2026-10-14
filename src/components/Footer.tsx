@@ -4,6 +4,7 @@ import { useLang } from "../i18n/LanguageContext";
 import { EMAIL, PHONE_DISPLAY, ROUTES, SOCIALS, WHATSAPP } from "../data/site";
 import { LogoMark } from "./Logo";
 import { SocialIcons } from "./SocialLinks";
+import { PoweredBy } from "./PoweredBy";
 import { scrollToTop } from "./SmoothScroll";
 
 export function Footer() {
@@ -103,6 +104,8 @@ export function Footer() {
             </button>
           </div>
         </div>
+
+        <PoweredBy />
       </div>
     </footer>
   );
