@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const PATHS = [
   "M30 16 H70 L84 31 L50 64 L16 31 Z",
@@ -42,5 +43,71 @@ export function Logo({ light = false }: { light?: boolean }) {
         <span className="mt-1 whitespace-nowrap text-[0.52rem] font-semibold uppercase tracking-[0.3em] opacity-60 sm:text-[0.58rem] sm:tracking-[0.34em]">Diamond Yoga</span>
       </span>
     </span>
+  );
+}
+
+const BRAND = "INFISKIES";
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#%&*+=<>/";
+
+/** Hover "decode" effect: letters scramble, then lock in left to right. */
+function useScramble(target: string) {
+  const [text, setText] = useState(target);
+  const timer = useRef<number | null>(null);
+
+  const run = useCallback(() => {
+    if (timer.current) window.clearInterval(timer.current);
+    let frame = 0;
+    timer.current = window.setInterval(() => {
+      frame++;
+      const locked = Math.floor(frame / 2);
+      setText(
+        target
+          .split("")
+          .map((c, i) => (i < locked ? c : GLYPHS[Math.floor(Math.random() * GLYPHS.length)]))
+          .join(""),
+      );
+      if (locked >= target.length && timer.current) {
+        window.clearInterval(timer.current);
+        timer.current = null;
+      }
+    }, 40);
+  }, [target]);
+
+  useEffect(() => () => {
+    if (timer.current) window.clearInterval(timer.current);
+  }, []);
+
+  return [text, run] as const;
+}
+
+/** Animated "Powered by Infiskies" credit shown just beneath the logo. */
+export function PoweredByInfiskies({ light = false }: { light?: boolean }) {
+  const [text, scramble] = useScramble(BRAND);
+  return (
+    <a
+      href="https://infiskies.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      data-cursor="hover"
+      onMouseEnter={scramble}
+      onFocus={scramble}
+      className={`ifx group mt-1.5 inline-flex w-fit items-center gap-1 whitespace-nowrap text-[0.5rem] font-semibold uppercase tracking-[0.28em] sm:text-[0.54rem] sm:tracking-[0.3em] ${light ? "ifx--light" : ""}`}
+      aria-label="Powered by Infiskies"
+    >
+      <span aria-hidden className={`transition-colors duration-300 ${light ? "text-linen/55 group-hover:text-linen/85" : "text-ink/45 group-hover:text-ink/75"}`}>
+        Powered by
+      </span>
+      <span aria-hidden className="ifx-word relative inline-flex font-bold">
+        {text.split("").map((c, i) => (
+          <span key={i} className="ifx-letter" style={{ animationDelay: `${i * 0.11}s` }}>
+            {c}
+          </span>
+        ))}
+        <span className="ifx-underline" />
+      </span>
+      <svg aria-hidden viewBox="0 0 24 24" className="ifx-star h-[0.8em] w-[0.8em] sm:h-[0.85em] sm:w-[0.85em]">
+        <path d="M12 0 C13 8 16 11 24 12 C16 13 13 16 12 24 C11 16 8 13 0 12 C8 11 11 8 12 0 Z" fill="currentColor" />
+      </svg>
+    </a>
   );
 }

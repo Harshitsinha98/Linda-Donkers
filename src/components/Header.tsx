@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { ROUTES, EMAIL } from "../data/site";
-import { Logo } from "./Logo";
+import { Logo, PoweredByInfiskies } from "./Logo";
 import { Magnetic } from "./Magnetic";
 import { setScrollLocked } from "./SmoothScroll";
 import { SocialIcons } from "./SocialLinks";
@@ -87,9 +87,14 @@ export function Header() {
           }`}
         >
           <div className="container-x flex items-center justify-between gap-6">
-            <Link to={ROUTES.home} aria-label="Linda Donkers – home" data-cursor="hover">
-              <Logo />
-            </Link>
+            <div className="flex flex-col">
+              <Link to={ROUTES.home} aria-label="Linda Donkers – home" data-cursor="hover">
+                <Logo />
+              </Link>
+              <div className="pl-10 sm:pl-12">
+                <PoweredByInfiskies />
+              </div>
+            </div>
 
             <nav className="hidden items-center gap-1 xl:flex" aria-label="Hoofdmenu">
               {links.slice(0, 6).map((l) => (
@@ -156,9 +161,14 @@ export function Header() {
             transition={{ duration: 0.9, ease: [0.76, 0, 0.24, 1] }}
           >
             <div className="container-x flex items-center justify-between py-5">
-              <Link to={ROUTES.home}>
-                <Logo light />
-              </Link>
+              <div className="flex flex-col">
+                <Link to={ROUTES.home}>
+                  <Logo light />
+                </Link>
+                <div className="pl-10 sm:pl-12">
+                  <PoweredByInfiskies light />
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
