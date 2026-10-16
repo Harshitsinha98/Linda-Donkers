@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../lib/api";
 import { ROUTES } from "../data/site";
-import { LogoMark } from "../components/Logo";
+import { LogoMark, PoweredByInfiskies } from "../components/Logo";
 import { usePageTitle } from "../components/usePageTitle";
 import { adminApi, CATEGORY_LABELS, downloadCsv, euro, getPass, setPass, when, type AdminBooking, type AdminSession } from "./adminApi";
 import { SessionForm } from "./SessionForm";
@@ -38,6 +38,9 @@ function Login({ onOk }: { onOk: () => void }) {
     <div className="grid min-h-screen place-items-center bg-cream p-5">
       <form onSubmit={submit} className="w-full max-w-sm rounded-3xl bg-linen p-8 shadow-xl">
         <LogoMark className="h-12 w-12 text-forest" />
+        <div className="mt-2.5">
+          <PoweredByInfiskies />
+        </div>
         <h1 className="mt-5 font-display text-3xl text-ink">Linda's admin</h1>
         <p className="mt-2 text-sm text-forest/70">Sessions, bookings and payments.</p>
         <input type="password" autoComplete="current-password" className={`${input} mt-6`} placeholder="Passcode" value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
@@ -334,7 +337,12 @@ export default function AdminApp() {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
             <LogoMark className="h-9 w-9 text-forest" />
-            <span className="font-display text-xl text-ink">Linda's admin</span>
+            <div className="flex flex-col">
+              <span className="font-display text-xl leading-none text-ink">Linda's admin</span>
+              <div className="mt-1">
+                <PoweredByInfiskies />
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Link to={ROUTES.home} target="_blank" className="text-sm font-semibold text-forest underline underline-offset-4">
