@@ -44,3 +44,25 @@ export function Logo({ light = false }: { light?: boolean }) {
     </span>
   );
 }
+
+/** Animated "Powered by Infiskies" credit shown just beneath the logo. */
+export function PoweredByInfiskies({ light = false }: { light?: boolean }) {
+  return (
+    <a
+      href="https://infiskies.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      data-cursor="hover"
+      onClick={(e) => e.stopPropagation()}
+      className="group mt-1.5 inline-flex w-fit items-center whitespace-nowrap text-[0.5rem] font-semibold uppercase tracking-[0.28em] sm:text-[0.54rem] sm:tracking-[0.3em]"
+      aria-label="Powered by Infiskies"
+    >
+      <span className={light ? "text-linen/55" : "text-ink/45"}>Powered by</span>
+      <span
+        className={`infiskies-credit ml-1 font-bold ${light ? "infiskies-credit--light" : ""}`}
+      >
+        Infiskies
+      </span>
+    </a>
+  );
+}
