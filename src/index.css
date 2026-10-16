@@ -133,35 +133,74 @@
   animation: marquee 38s linear infinite;
 }
 
-/* shimmering "powered by" credit under the logo */
+/* lively "powered by" credit under the logo */
 @keyframes infiskies-shimmer {
   0% { background-position: 200% center; }
   100% { background-position: -200% center; }
+}
+@keyframes infiskies-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(232,118,43,0)); }
+  50% { filter: drop-shadow(0 0 6px rgba(232,118,43,0.55)); }
+}
+@keyframes infiskies-spark {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  40% { transform: scale(1.7); opacity: 1; }
+  70% { transform: scale(0.8); opacity: 0.6; }
 }
 .infiskies-credit {
   background: linear-gradient(
     100deg,
     var(--color-forest) 0%,
-    var(--color-forest) 38%,
-    var(--color-saffron) 50%,
-    var(--color-forest) 62%,
+    var(--color-forest) 30%,
+    var(--color-saffron) 45%,
+    #ffcf99 50%,
+    var(--color-saffron) 55%,
+    var(--color-forest) 70%,
     var(--color-forest) 100%
   );
-  background-size: 200% auto;
+  background-size: 220% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: infiskies-shimmer 4.5s linear infinite;
+  animation:
+    infiskies-shimmer 2.4s linear infinite,
+    infiskies-glow 2.4s ease-in-out infinite;
 }
 .infiskies-credit--light {
   background-image: linear-gradient(
     100deg,
     var(--color-linen) 0%,
-    var(--color-linen) 38%,
-    var(--color-saffron-soft) 50%,
-    var(--color-linen) 62%,
+    var(--color-linen) 30%,
+    var(--color-saffron-soft) 45%,
+    #fff 50%,
+    var(--color-saffron-soft) 55%,
+    var(--color-linen) 70%,
     var(--color-linen) 100%
   );
+}
+.group:hover .infiskies-credit {
+  animation-duration: 1s, 1s;
+}
+.infiskies-spark {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: var(--color-saffron);
+  box-shadow: 0 0 5px 1px rgba(232,118,43,0.7);
+  animation: infiskies-spark 2.4s ease-in-out infinite;
+}
+.group:hover .infiskies-spark {
+  animation-duration: 1s;
+}
+.infiskies-credit--light ~ .infiskies-spark,
+.infiskies-spark--light {
+  background: var(--color-saffron-soft);
+  box-shadow: 0 0 5px 1px rgba(245,178,124,0.8);
+}
+@media (prefers-reduced-motion: reduce) {
+  .infiskies-credit { animation: none; }
+  .infiskies-spark { animation: none; }
 }
 
 @keyframes breathe {

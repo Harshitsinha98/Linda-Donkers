@@ -54,15 +54,16 @@ export function PoweredByInfiskies({ light = false }: { light?: boolean }) {
       rel="noopener noreferrer"
       data-cursor="hover"
       onClick={(e) => e.stopPropagation()}
-      className="group mt-1.5 inline-flex w-fit items-center whitespace-nowrap text-[0.5rem] font-semibold uppercase tracking-[0.28em] sm:text-[0.54rem] sm:tracking-[0.3em]"
+      className="group mt-1.5 inline-flex w-fit items-center gap-1 whitespace-nowrap text-[0.5rem] font-semibold uppercase tracking-[0.28em] transition-transform duration-300 hover:-translate-y-px sm:text-[0.54rem] sm:tracking-[0.3em]"
       aria-label="Powered by Infiskies"
     >
-      <span className={light ? "text-linen/55" : "text-ink/45"}>Powered by</span>
-      <span
-        className={`infiskies-credit ml-1 font-bold ${light ? "infiskies-credit--light" : ""}`}
-      >
+      <span className={`transition-opacity duration-300 ${light ? "text-linen/55 group-hover:text-linen/80" : "text-ink/45 group-hover:text-ink/70"}`}>
+        Powered by
+      </span>
+      <span className={`infiskies-credit font-bold ${light ? "infiskies-credit--light" : ""}`}>
         Infiskies
       </span>
+      <span className={`infiskies-spark ${light ? "infiskies-spark--light" : ""}`} aria-hidden="true" />
     </a>
   );
 }
