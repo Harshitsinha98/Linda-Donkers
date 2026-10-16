@@ -97,6 +97,7 @@ export function PoweredByInfiskies({ light = false }: { light?: boolean }) {
       <span aria-hidden className={`transition-colors duration-300 ${light ? "text-linen/55 group-hover:text-linen/85" : "text-ink/45 group-hover:text-ink/75"}`}>
         Powered by
       </span>
+      <InfiskiesMark light={light} />
       <span aria-hidden className="ifx-word relative inline-flex font-bold">
         {text.split("").map((c, i) => (
           <span key={i} className="ifx-letter" style={{ animationDelay: `${i * 0.11}s` }}>
@@ -105,9 +106,37 @@ export function PoweredByInfiskies({ light = false }: { light?: boolean }) {
         ))}
         <span className="ifx-underline" />
       </span>
-      <svg aria-hidden viewBox="0 0 24 24" className="ifx-star h-[0.8em] w-[0.8em] sm:h-[0.85em] sm:w-[0.85em]">
-        <path d="M12 0 C13 8 16 11 24 12 C16 13 13 16 12 24 C11 16 8 13 0 12 C8 11 11 8 12 0 Z" fill="currentColor" />
-      </svg>
     </a>
+  );
+}
+
+/** Infiskies infinity path (figure-eight crossing at the centre). */
+const INFINITY =
+  "M50 25 C42 14 32 8 22 8 C12 8 6 16 6 25 C6 34 12 42 22 42 C32 42 42 36 50 25 C58 14 68 8 78 8 C88 8 94 16 94 25 C94 34 88 42 78 42 C68 42 58 36 50 25 Z";
+
+/** Animated Infiskies mark: stroke draws in, blue fill breathes, a comet of light loops the path. */
+function InfiskiesMark({ light = false }: { light?: boolean }) {
+  return (
+    <svg viewBox="0 0 100 50" aria-hidden className="ifx-mark h-[1.45em] w-[2.9em] shrink-0 overflow-visible">
+      <defs>
+        <linearGradient id={light ? "ifx-fill-l" : "ifx-fill"} x1="0" x2="1">
+          <stop offset="0%" stopColor="#7cc8f2" />
+          <stop offset="50%" stopColor="#4fb0e8" />
+          <stop offset="100%" stopColor="#7cc8f2" />
+        </linearGradient>
+      </defs>
+      <path className="ifx-mark-fill" d={INFINITY} fill={`url(#${light ? "ifx-fill-l" : "ifx-fill"})`} />
+      <motion.path
+        d={INFINITY}
+        fill="none"
+        stroke={light ? "var(--color-linen)" : "#0b0b0b"}
+        strokeWidth={7}
+        strokeLinejoin="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 1.6, delay: 0.4, ease: [0.65, 0, 0.35, 1] }}
+      />
+      <path className="ifx-mark-comet" d={INFINITY} pathLength={100} fill="none" strokeWidth={4} strokeLinecap="round" />
+    </svg>
   );
 }
