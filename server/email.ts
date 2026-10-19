@@ -125,6 +125,38 @@ const copy = {
 
 const L = (lang: string) => (lang === "en" ? copy.en : copy.nl);
 
+/* ---------------- newsletter ---------------- */
+
+export async function sendNewsletterWelcome(email: string, lang: string, base: string) {
+  const en = lang === "en";
+  const subject = en ? "Welcome to the Linda Donkers newsletter" : "Welkom bij de nieuwsbrief van Linda Donkers";
+  const unsubscribe = `${base.replace(/\/+$/, "")}/?unsubscribe=${encodeURIComponent(email)}`;
+
+  const subscriber = layout(
+    en
+      ? `<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">You're on the list 🌿</p>
+<p style="font-size:15px;line-height:1.6;margin:12px 0 0">Thank you for subscribing. You'll be among the first to hear about upcoming events, workshops and new sessions.</p>
+<p style="font-size:15px;line-height:1.6;margin:18px 0 0">Warm regards,<br>Linda</p>
+<p style="margin:26px 0 0;font-size:12px;color:#8e9f84">You can <a href="${esc(unsubscribe)}" style="color:#8e9f84">unsubscribe</a> at any time.</p>`
+      : `<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">Je staat op de lijst 🌿</p>
+<p style="font-size:15px;line-height:1.6;margin:12px 0 0">Bedankt voor je inschrijving. Je hoort als eerste over komende events, workshops en nieuwe sessies.</p>
+<p style="font-size:15px;line-height:1.6;margin:18px 0 0">Warme groet,<br>Linda</p>
+<p style="margin:26px 0 0;font-size:12px;color:#8e9f84">Je kan je altijd <a href="${esc(unsubscribe)}" style="color:#8e9f84">uitschrijven</a>.</p>`,
+  );
+
+  const admin = layout(`
+<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">New newsletter subscriber</p>
+${rows([
+  ["Email", `<a href="mailto:${esc(email)}">${esc(email)}</a>`],
+  ["Language", en ? "English" : "Nederlands"],
+])}`);
+
+  await Promise.all([
+    send(email, subject, subscriber, ADMIN_EMAIL()),
+    send(ADMIN_EMAIL(), `New newsletter subscriber: ${email}`, admin, email),
+  ]);
+}
+
 /* ---------------- confirmations ---------------- */
 
 export async function sendBookingConfirmed(

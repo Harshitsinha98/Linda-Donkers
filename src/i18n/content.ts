@@ -43,7 +43,7 @@ const nl = {
   preloader: "Adem in",
   home: {
     heroEyebrow: "Diamond Yoga · Deurne, Antwerpen",
-    heroTitle: ["Open je", "hart,", "wees het", "licht."],
+    heroTitle: ["Open je", "hart,", "straal je", "licht."],
     heroSub:
       "Kundalini Yoga, gongmeditatie en holistische massages. Een warme plek om te ademen, te voelen en weer thuis te komen in jezelf.",
     heroCta: "Boek een sessie",
@@ -117,14 +117,21 @@ const nl = {
       { label: "Amritsar", title: "De Gouden Tempel", note: "Een van de meest bijzondere plekken van India." },
       { label: "Hart", title: "Tot gauw", note: "Met de hand op het hart. Tot de volgende ademhaling." },
     ],
-    marquee: ["Kundalini Yoga", "Gongmeditatie", "Holistische massage", "Ayurveda", "Mantra", "Ademwerk"],
+    marquee: [
+      "M.E.R. Myo Fascia Energetic Therapy",
+      "Lomi Lomi Nui massage",
+      "Taoïstische buik- & orgaanmassage",
+      "Sat Nam Rasayan healing",
+      "Kundalini Yoga",
+      "Reizen",
+    ],
   },
   about: {
     eyebrow: "Over Linda",
     title: "Een leven lang ",
     accent: "liefde voor de mens",
     intro:
-      "Linda Donkers is Kundalini Yoga leraar en holistisch masseuse in Deurne (Antwerpen). Haar werk draait om één ding: jou helpen om weer in contact te komen met je lichaam, je adem en je hart.",
+      "Linda Donkers is Kundalini Yoga leraar en gecertificeerd massage therapeut in Deurne (Antwerpen). Haar werk draait om één ding: jou helpen om weer in contact te komen met je lichaam, je adem en je hart.",
     storyTitle: "Haar verhaal",
     story: [
       "Kundalini Yoga kwam op haar pad en veranderde alles. De combinatie van beweging, adem, mantra en meditatie gaf haar een kracht en een rust die ze nergens anders vond.",
@@ -424,7 +431,7 @@ const nl = {
     },
   },
   footer: {
-    tagline: "Kundalini Yoga · Gongmeditatie · Holistische massages · Ayurveda reizen",
+    tagline: "Holistische massages · Kundalini Yoga · Reizen",
     explore: "Ontdek",
     contact: "Contact",
     legal: "Juridisch",
@@ -432,6 +439,19 @@ const nl = {
     terms: "Voorwaarden",
     rights: "Alle rechten voorbehouden.",
     top: "Terug naar boven",
+  },
+  newsletter: {
+    eyebrow: "Blijf verbonden",
+    title: "Schrijf je in voor de ",
+    accent: "nieuwsbrief",
+    text: "Ontvang als eerste bericht over komende events, workshops en nieuwe sessies.",
+    placeholder: "Je e-mailadres",
+    button: "Inschrijven",
+    sending: "Bezig…",
+    success: "Dankjewel! Je staat op de lijst. Houd je mailbox in de gaten.",
+    errorInvalid: "Vul een geldig e-mailadres in.",
+    errorGeneric: "Er ging iets mis. Probeer het later opnieuw.",
+    privacy: "Je kan je altijd uitschrijven. We delen je gegevens nooit.",
   },
   legal: {
     privacyTitle: "Privacy",
@@ -574,14 +594,21 @@ const en: Content = {
       { label: "Amritsar", title: "The Golden Temple", note: "One of the most special places in India." },
       { label: "Heart", title: "See you soon", note: "Hand on heart. Until the next breath." },
     ],
-    marquee: ["Kundalini Yoga", "Gong meditation", "Holistic massage", "Ayurveda", "Mantra", "Breathwork"],
+    marquee: [
+      "M.E.R. Myo Fascia Energetic Therapy",
+      "Lomi Lomi Nui massage",
+      "Taoïstic belly & organ massage",
+      "Sat Nam Rasayan healing",
+      "Kundalini Yoga",
+      "Travels",
+    ],
   },
   about: {
     eyebrow: "About Linda",
     title: "A lifelong ",
     accent: "love for people",
     intro:
-      "Linda Donkers is a Kundalini Yoga teacher and holistic massage therapist in Deurne (Antwerp). Her work is about one thing: helping you reconnect with your body, your breath and your heart.",
+      "Linda Donkers is a Kundalini Yoga teacher and certified massage therapist in Deurne (Antwerp). Her work is about one thing: helping you reconnect with your body, your breath and your heart.",
     storyTitle: "Her story",
     story: [
       "Kundalini Yoga crossed her path and changed everything. The combination of movement, breath, mantra and meditation gave her a strength and a calm she couldn't find anywhere else.",
@@ -881,7 +908,7 @@ const en: Content = {
     },
   },
   footer: {
-    tagline: "Kundalini Yoga · Gong meditation · Holistic massages · Ayurveda travels",
+    tagline: "Holistic massages · Kundalini Yoga · Travels",
     explore: "Explore",
     contact: "Contact",
     legal: "Legal",
@@ -889,6 +916,19 @@ const en: Content = {
     terms: "Terms",
     rights: "All rights reserved.",
     top: "Back to top",
+  },
+  newsletter: {
+    eyebrow: "Stay connected",
+    title: "Subscribe to the ",
+    accent: "newsletter",
+    text: "Be the first to hear about upcoming events, workshops and new sessions.",
+    placeholder: "Your email address",
+    button: "Subscribe",
+    sending: "Sending…",
+    success: "Thank you! You're on the list. Keep an eye on your inbox.",
+    errorInvalid: "Please enter a valid email address.",
+    errorGeneric: "Something went wrong. Please try again later.",
+    privacy: "You can unsubscribe at any time. We never share your details.",
   },
   legal: {
     privacyTitle: "Privacy",

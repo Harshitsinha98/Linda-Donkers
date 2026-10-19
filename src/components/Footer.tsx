@@ -5,6 +5,7 @@ import { EMAIL, PHONE_DISPLAY, ROUTES, SOCIALS, WHATSAPP } from "../data/site";
 import { LogoMark } from "./Logo";
 import { SocialIcons } from "./SocialLinks";
 import { PoweredBy } from "./PoweredBy";
+import { Newsletter } from "./Newsletter";
 import { scrollToTop } from "./SmoothScroll";
 
 export function Footer() {
@@ -20,7 +21,9 @@ export function Footer() {
   ];
 
   return (
-    <footer className="relative overflow-hidden bg-ink text-linen">
+    <>
+      <Newsletter />
+      <footer className="relative overflow-hidden bg-ink text-linen">
       <div className="container-x pb-28 pt-24 lg:pb-10">
         <div className="grid gap-14 lg:grid-cols-12">
           <div className="lg:col-span-5">
@@ -108,5 +111,6 @@ export function Footer() {
         <PoweredBy />
       </div>
     </footer>
+    </>
   );
 }
