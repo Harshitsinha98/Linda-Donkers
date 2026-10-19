@@ -67,6 +67,17 @@ const SCHEMA = [
    )`,
   `CREATE INDEX IF NOT EXISTS bookings_session ON bookings (session_id, status)`,
   `CREATE INDEX IF NOT EXISTS bookings_checkout ON bookings (stripe_checkout_id)`,
+  `CREATE TABLE IF NOT EXISTS subscribers (
+     id            TEXT PRIMARY KEY,
+     email         TEXT NOT NULL UNIQUE,
+     lang          TEXT NOT NULL DEFAULT 'nl',
+     source        TEXT NOT NULL DEFAULT 'website',
+     status        TEXT NOT NULL DEFAULT 'subscribed',
+     created_at    TEXT NOT NULL,
+     unsubscribed_at TEXT,
+     CHECK (status IN ('subscribed','unsubscribed'))
+   )`,
+  `CREATE INDEX IF NOT EXISTS subscribers_status ON subscribers (status)`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };
