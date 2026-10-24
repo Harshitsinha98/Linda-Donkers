@@ -23,6 +23,7 @@ export type SessionRow = {
   capacity: number;
   price_cents: number;
   max_per_booking: number;
+  image: string;
   status: "draft" | "published" | "cancelled";
   created_at: string;
   updated_at: string;
@@ -54,6 +55,9 @@ export function toPublic(row: SessionRow & { taken?: number }) {
     capacity: row.capacity,
     spotsLeft: Math.max(0, row.capacity - (row.taken ?? 0)),
     maxPerBooking: row.max_per_booking,
+    // The image itself is served separately so list payloads stay small.
+    hasImage: !!row.image,
+    imageUrl: row.image ? `/api/session-image?id=${row.id}&v=${Date.parse(row.updated_at) || 0}` : "",
     status: row.status,
   };
 }
@@ -104,6 +108,9 @@ export const sessionInput = z.object({
   priceCents: z.number().int().min(0).max(1_000_000),
   maxPerBooking: z.number().int().min(1).max(50),
   status: z.enum(["draft", "published"]).default("published"),
+  // Optional cover photo as a data URL (data:image/...;base64,...). Empty string keeps the current image on update.
+  imageData: z.string().max(3_500_000).default(""),
+  removeImage: z.boolean().default(false),
 });
 export type SessionInput = z.infer<typeof sessionInput>;
 
@@ -163,11 +170,21 @@ function columns(input: SessionInput) {
   };
 }
 
+/** Validates an uploaded data URL and returns it, or "" if invalid/empty. */
+function cleanImage(data: string): string {
+  if (!data) return "";
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(data)) {
+    throw new HttpError(400, "bad_image", "The image must be a PNG, JPG, WebP or GIF.");
+  }
+  return data;
+}
+
 /** Creates one session, or a weekly series when repeatWeeks > 0. Returns the new ids. */
 export async function createSessions(input: SessionInput, repeatWeeks: number): Promise<string[]> {
   const ids: string[] = [];
+  const image = cleanImage(input.imageData);
   for (let w = 0; w <= repeatWeeks; w++) {
-    const cols = columns({ ...input, date: addDays(input.date, w * 7) });
+    const cols = { ...columns({ ...input, date: addDays(input.date, w * 7) }), image };
     const id = newId();
     const now = nowIso();
     const keys = Object.keys(cols);
@@ -187,7 +204,11 @@ export async function updateSession(id: string, input: SessionInput) {
   if (input.capacity < existing.taken) {
     throw new HttpError(409, "capacity_too_low", `${existing.taken} places are already booked. Capacity can't be lower than that.`);
   }
-  const cols = columns(input);
+  const base = columns(input);
+  const cols: Record<string, string | number> =
+    input.removeImage ? { ...base, image: "" }
+    : input.imageData ? { ...base, image: cleanImage(input.imageData) }
+    : base; // no new image sent and not removing: leave the existing image untouched
   const keys = Object.keys(cols);
   await run(`UPDATE sessions SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ?`, [
     ...Object.values(cols),
@@ -226,5 +247,13 @@ export function rowToInput(row: SessionRow): SessionInput {
     priceCents: row.price_cents,
     maxPerBooking: row.max_per_booking,
     status: row.status === "cancelled" ? "draft" : row.status,
+    imageData: "",
+    removeImage: false,
   };
+}
+
+/** Raw stored image (data URL) for the image-serving endpoint. */
+export async function getSessionImage(id: string): Promise<string> {
+  const row = await get<{ image: string }>(`SELECT image FROM sessions WHERE id = ?`, [id]);
+  return row?.image ?? "";
 }

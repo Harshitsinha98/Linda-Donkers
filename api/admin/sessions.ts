@@ -35,7 +35,7 @@ export const POST = handler(async (req) => {
     case "duplicate": {
       const row = await getSessionRow(body.id);
       if (!row) throw new HttpError(404, "not_found");
-      const ids = await createSessions({ ...rowToInput(row), status: "draft" }, 0);
+      const ids = await createSessions({ ...rowToInput(row), imageData: row.image, status: "draft" }, 0);
       return json({ ok: true, ids });
     }
     case "publish": {

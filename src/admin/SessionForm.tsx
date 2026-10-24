@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError } from "../lib/api";
 import { adminApi, CATEGORY_LABELS, type AdminSession } from "./adminApi";
+import { fileToDataUrl } from "./image";
 import { Btn, ErrorNote, input, Label, Modal } from "./ui";
 
 type Form = {
@@ -56,6 +57,29 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
   const editing = !!session;
 
+  // Cover photo. `imageData` is a freshly chosen image; `removeImage` clears the existing one.
+  const [imageData, setImageData] = useState("");
+  const [removeImage, setRemoveImage] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const existingImageUrl = session?.hasImage ? session.imageUrl : "";
+  const preview = imageData || (removeImage ? "" : existingImageUrl);
+
+  const pickImage = async (file?: File) => {
+    if (!file) return;
+    try {
+      const data = await fileToDataUrl(file);
+      if (data.length > 3_400_000) {
+        setError("That image is too large even after resizing. Please pick a smaller photo.");
+        return;
+      }
+      setImageData(data);
+      setRemoveImage(false);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read that image.");
+    }
+  };
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const priceCents = toCents(f.price);
@@ -76,6 +100,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
       category: f.category, venue: f.isOnline ? "" : f.venue, address: f.isOnline ? "" : f.address,
       isOnline: f.isOnline, onlineLink: f.isOnline ? f.onlineLink : "", date: f.date, startTime: f.startTime,
       durationMin, capacity, priceCents, maxPerBooking: Math.min(maxPerBooking, capacity), status: f.status,
+      imageData, removeImage,
     };
     setBusy(true);
     setError("");
@@ -104,6 +129,44 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
         <Label text="Title (English)" hint="Optional. If empty, the Dutch title is shown." className="sm:col-span-2">
           <input className={input} value={f.titleEn} onChange={(e) => set("titleEn", e.target.value)} placeholder="e.g. Kundalini Yoga & gong bath" />
         </Label>
+
+        <div className="sm:col-span-2">
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-forest/70">Photo</span>
+          <p className="mt-1 text-xs text-forest/50">A photo for this session, shown on the website. If you leave it empty, a default picture for the type is used.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            <div className="grid h-24 w-36 shrink-0 place-items-center overflow-hidden rounded-xl border border-forest/15 bg-cream">
+              {preview ? (
+                <img src={preview} alt="Session preview" className="h-full w-full object-cover" />
+              ) : (
+                <span className="px-2 text-center text-[0.7rem] text-forest/40">No photo (default is used)</span>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => pickImage(e.target.files?.[0] ?? undefined)}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Btn kind="ghost" onClick={() => fileRef.current?.click()}>
+                {preview ? "Change photo" : "Upload photo"}
+              </Btn>
+              {preview && (
+                <Btn
+                  kind="ghost"
+                  onClick={() => {
+                    setImageData("");
+                    setRemoveImage(true);
+                    if (fileRef.current) fileRef.current.value = "";
+                  }}
+                >
+                  Remove
+                </Btn>
+              )}
+            </div>
+          </div>
+        </div>
 
         <Label text="Type">
           <select className={input} value={f.category} onChange={(e) => set("category", e.target.value)}>

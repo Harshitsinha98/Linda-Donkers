@@ -28,6 +28,7 @@ const SCHEMA = [
      capacity        INTEGER NOT NULL,
      price_cents     INTEGER NOT NULL,
      max_per_booking INTEGER NOT NULL DEFAULT 1,
+     image           TEXT NOT NULL DEFAULT '',
      status          TEXT NOT NULL DEFAULT 'published',
      created_at      TEXT NOT NULL,
      updated_at      TEXT NOT NULL,
@@ -99,6 +100,12 @@ async function open(): Promise<Client> {
     client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN, intMode: "number" });
   }
   for (const statement of SCHEMA) await client.execute(statement);
+  // Migration for databases created before the `image` column existed.
+  try {
+    await client.execute(`ALTER TABLE sessions ADD COLUMN image TEXT NOT NULL DEFAULT ''`);
+  } catch {
+    /* column already exists */
+  }
   return client;
 }
 
