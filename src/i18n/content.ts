@@ -43,7 +43,7 @@ const nl = {
   preloader: "Adem in",
   home: {
     heroEyebrow: "Diamond Yoga · Deurne, Antwerpen",
-    heroTitle: ["Open je", "hart,", "straal je", "licht."],
+    heroTitle: ["Open je", "hart,", "straal je", "licht"],
     heroSub:
       "Kundalini Yoga, gongmeditatie en holistische massages. Een warme plek om te ademen, te voelen en weer thuis te komen in jezelf.",
     heroCta: "Boek een sessie",
@@ -520,7 +520,7 @@ const en: Content = {
   preloader: "Breathe in",
   home: {
     heroEyebrow: "Diamond Yoga · Deurne, Antwerp",
-    heroTitle: ["Open your", "heart,", "be the", "light."],
+    heroTitle: ["Open your", "heart,", "be the", "light"],
     heroSub:
       "Kundalini Yoga, gong meditation and holistic massages. A warm place to breathe, to feel, and to come home to yourself.",
     heroCta: "Book a session",
