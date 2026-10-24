@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Lang } from "../i18n/content";
-import { IMG } from "../data/site";
+import { IMG, sm } from "../data/site";
 
 export type PublicSession = {
   id: string;
@@ -18,6 +18,8 @@ export type PublicSession = {
   capacity: number;
   spotsLeft: number;
   maxPerBooking: number;
+  hasImage: boolean;
+  imageUrl: string;
   status: "draft" | "published" | "cancelled";
 };
 
@@ -84,16 +86,33 @@ export const fmtLong = (iso: string, lang: Lang) =>
 export const fmtEuro = (cents: number, lang: Lang) =>
   new Intl.NumberFormat(lang === "en" ? "en-IE" : "nl-BE", { style: "currency", currency: "EUR" }).format(cents / 100);
 
-export const sessionImage = (category: string) =>
-  ({
-    yoga: IMG.twist,
-    gong: IMG.arms,
-    workshop: IMG.smile,
-    massage: IMG.lomi1,
-    healing: IMG.selflove,
-    online: IMG.selflove,
-    retreat: IMG.goldenTemple,
-  })[category] ?? IMG.portrait;
+const CATEGORY_IMAGE: Record<string, string> = {
+  yoga: IMG.twist,
+  gong: IMG.arms,
+  workshop: IMG.smile,
+  massage: IMG.lomi1,
+  healing: IMG.selflove,
+  online: IMG.selflove,
+  retreat: IMG.goldenTemple,
+};
+
+/** Fallback photo per category, used when a session has no uploaded image. */
+export const categoryImage = (category: string) => CATEGORY_IMAGE[category] ?? IMG.portrait;
+
+/** The photo to show for a session: Linda's uploaded image if there is one, else a category default. */
+export function sessionImage(s: { category: string; imageUrl?: string }): string {
+  return s.imageUrl || categoryImage(s.category);
+}
+
+/**
+ * src + srcSet for a session cover image. Uploaded images are a single file (no -sm
+ * variant); the bundled category fallbacks have a small variant for lazy lists.
+ */
+export function sessionImageSrc(s: { category: string; imageUrl?: string }): { src: string; srcSet?: string } {
+  if (s.imageUrl) return { src: s.imageUrl };
+  const full = categoryImage(s.category);
+  return { src: full, srcSet: `${sm(full)} 720w, ${full} 1600w` };
+}
 
 /* ---------------- hooks ---------------- */
 

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
-import { ROUTES, sm, waLink } from "../data/site";
-import { api, ApiError, fmtEuro, fmtLong, sessionImage, type PublicSession } from "../lib/api";
+import { ROUTES, waLink } from "../data/site";
+import { api, ApiError, fmtEuro, fmtLong, sessionImageSrc, type PublicSession } from "../lib/api";
 import { Arrow } from "../components/Arrow";
 import { FadeUp } from "../components/Reveal";
 import { Button } from "../components/Magnetic";
@@ -179,7 +179,7 @@ export default function SessionDetail() {
             <div className="lg:col-span-7">
               <FadeUp>
                 <div className="relative aspect-[16/9] overflow-hidden rounded-[2rem]">
-                  <img src={sessionImage(s.category)} srcSet={`${sm(sessionImage(s.category))} 720w, ${sessionImage(s.category)} 1600w`} sizes="(min-width:1024px) 55vw, 100vw" alt="" className="h-full w-full object-cover" />
+                  {(() => { const im = sessionImageSrc(s); return <img src={im.src} srcSet={im.srcSet} sizes="(min-width:1024px) 55vw, 100vw" alt="" className="h-full w-full object-cover" />; })()}
                 </div>
                 <span className="eyebrow mt-10">{t.categories[s.category] ?? t.categories.other}</span>
                 <h1 className="mt-5 font-display text-[clamp(2.4rem,5vw,4.4rem)] font-light leading-[1.05] text-ink">{s.title[lang]}</h1>

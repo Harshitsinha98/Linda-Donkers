@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useLang } from "../../i18n/LanguageContext";
 import { ROUTES, sm } from "../../data/site";
-import { fmtEuro, fmtParts, sessionImage, type PublicSession } from "../../lib/api";
+import { categoryImage, fmtEuro, fmtParts, type PublicSession } from "../../lib/api";
 import { Arrow } from "../Arrow";
 
 export function SessionCard({ s }: { s: PublicSession }) {
@@ -18,7 +18,7 @@ export function SessionCard({ s }: { s: PublicSession }) {
     >
       <div className="relative h-40 overflow-hidden">
         <img
-          src={sm(sessionImage(s.category))}
+          src={s.imageUrl || sm(categoryImage(s.category))}
           alt=""
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-[1.2s] group-hover:scale-105"
