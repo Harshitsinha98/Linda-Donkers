@@ -139,7 +139,7 @@ function BookingForm({ s }: { s: PublicSession }) {
                       : code === "login_required"
                         ? b.errors.login
                         : code === "invalid_input"
-                          ? b.errors.email
+                          ? (err instanceof ApiError && err.message ? err.message : b.errors.generic)
                           : b.errors.generic,
       );
       setBusy(false);
