@@ -278,6 +278,174 @@ export async function getSessionImage(id: string): Promise<string> {
   return row?.image ?? "";
 }
 
+/* ---------------- non-destructive standard schedule sync ---------------- */
+
+type StandardSyncCandidate = {
+  offering: string;
+  title: string;
+  date: string;
+  startTime: string;
+  bookingMode: "scheduled" | "appointment";
+  section: string;
+  isOnline: boolean;
+  status: "published" | "draft";
+  durationMin: number;
+  priceCents: number;
+};
+
+type StandardSyncConflict = {
+  offering: string;
+  title: string;
+  existingTitle: string;
+  date: string;
+  existingTime: string;
+  expectedTime: string;
+  reason: string;
+};
+
+/** Normalise accents and punctuation so older hand-created sessions can be recognised safely. */
+function comparableTitle(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function relatedToOffering(row: SessionRow, offering: (typeof OFFERINGS)[number]): boolean {
+  if (row.offering === offering.key) return true;
+  if (row.category !== offering.category) return false;
+
+  // Sat Nam Rasayan has separate live and online offerings with nearly identical names.
+  // The online flag disambiguates those two records.
+  if (offering.key.startsWith("satnam-") && Boolean(row.is_online) !== offering.isOnline) return false;
+
+  const actual = [row.title_nl, row.title_en].filter(Boolean).map(comparableTitle);
+  const expected = [offering.titleNl, offering.titleEn].map(comparableTitle);
+  if (actual.some((a) => expected.some((e) => a === e || a.startsWith(e) || e.startsWith(a)))) return true;
+
+  // Older admin entries may call the Saturday one-to-one session "Kundalini Yoga Privé".
+  if (offering.key === "coaching-online" && Boolean(row.is_online) && actual.some((a) => a.includes("kundaliniyogaprive"))) return true;
+  return false;
+}
+
+/**
+ * Preview or create only missing regular offerings. Unlike resetToStandard(), this never
+ * deletes, edits, cancels, hides or republishes an existing session. A similar existing
+ * record with different time/mode/price is reported as a conflict and is not duplicated.
+ *
+ * Online sessions start as drafts until Linda adds their private meeting link in the admin.
+ */
+export async function syncMissingStandard(weeks: number, previewOnly: boolean) {
+  const today = todayBE();
+  const rows = await all<SessionRow>(\`SELECT * FROM sessions\`, []);
+  const candidates: StandardSyncCandidate[] = [];
+  const conflicts: StandardSyncConflict[] = [];
+  const skipped: { offering: string; title: string; date: string; reason: string }[] = [];
+  const created: { id: string; offering: string; title: string; date: string; startTime: string; status: string }[] = [];
+  const appointmentUntil = addDays(today, 365);
+
+  for (const o of OFFERINGS) {
+    const base: SessionInput = {
+      titleNl: o.titleNl,
+      titleEn: o.titleEn,
+      descriptionNl: o.descriptionNl,
+      descriptionEn: o.descriptionEn,
+      category: o.category,
+      venue: o.isOnline ? "" : IN_PERSON_VENUE,
+      address: "",
+      isOnline: o.isOnline,
+      onlineLink: "",
+      date: appointmentUntil,
+      startTime: APPOINTMENT_TIME,
+      durationMin: o.durationMin,
+      capacity: o.weekly ? o.capacity : 999,
+      priceCents: o.priceCents,
+      maxPerBooking: o.maxPerBooking,
+      // Online offerings remain hidden until Linda adds the private meeting link.
+      status: o.isOnline ? "draft" : "published",
+      imageData: "",
+      removeImage: false,
+      imageKey: o.photo,
+      offering: o.key,
+      bookingMode: o.weekly ? "scheduled" : "appointment",
+    };
+
+    const dates = o.weekly
+      ? Array.from({ length: weeks }, (_, i) => addDays(nextWeekdayDate(o.weekly!.weekday, o.weekly!.time), i * 7))
+      : [appointmentUntil];
+
+    for (const date of dates) {
+      const matches = rows.filter((row) => {
+        if (!relatedToOffering(row, o)) return false;
+        if (o.weekly) return row.date === date;
+        return row.booking_mode === "appointment" && row.date >= today && Date.parse(row.starts_at) > Date.now();
+      });
+
+      if (matches.length > 0) {
+        const expectedTime = o.weekly?.time ?? "By appointment";
+        const expectedMode = o.weekly ? "scheduled" : "appointment";
+        const mismatches = new Set<string>();
+        if (matches.length > 1) mismatches.add("Multiple matching records already exist.");
+        for (const row of matches) {
+          if (row.start_time !== (o.weekly?.time ?? APPOINTMENT_TIME)) mismatches.add("Time does not match Linda's requested schedule.");
+          if (row.booking_mode !== expectedMode) mismatches.add("Booking mode differs from the regular offering.");
+          if (Boolean(row.is_online) !== o.isOnline) mismatches.add("Online / in-person setting differs.");
+          if (row.duration_min !== o.durationMin) mismatches.add("Duration differs from Linda's requested offer.");
+          if (row.price_cents !== o.priceCents) mismatches.add("Price differs from Linda's requested offer.");
+          if (row.status !== "published") mismatches.add("Existing record is not published (draft or cancelled).");
+          if (row.offering && row.offering !== o.key) mismatches.add("Existing record is linked to a different membership offering.");
+        }
+
+        if (mismatches.size > 0) {
+          conflicts.push({
+            offering: o.key,
+            title: o.titleEn,
+            existingTitle: matches.map((x) => x.title_nl).join(" / "),
+            date: matches.map((x) => x.date).join(" / "),
+            existingTime: matches.map((x) => x.start_time).join(" / "),
+            expectedTime,
+            reason: [...mismatches].join(" "),
+          });
+        } else {
+          skipped.push({ offering: o.key, title: o.titleEn, date, reason: "A matching published session already exists." });
+        }
+        continue;
+      }
+
+      candidates.push({
+        offering: o.key,
+        title: o.titleEn,
+        date,
+        startTime: o.weekly?.time ?? APPOINTMENT_TIME,
+        bookingMode: o.weekly ? "scheduled" : "appointment",
+        section: sectionOf({ category: o.category, isOnline: o.isOnline }),
+        isOnline: o.isOnline,
+        status: base.status,
+        durationMin: o.durationMin,
+        priceCents: o.priceCents,
+      });
+
+      if (!previewOnly) {
+        const payload: SessionInput = { ...base, date, startTime: o.weekly?.time ?? APPOINTMENT_TIME };
+        const [id] = await createSessions(payload, 0);
+        created.push({ id, offering: o.key, title: o.titleEn, date, startTime: payload.startTime, status: payload.status });
+        const inserted = await getSessionRow(id);
+        if (inserted) rows.push(inserted);
+      }
+    }
+  }
+
+  return {
+    weeks,
+    previewOnly,
+    plannedCount: candidates.length,
+    createdCount: created.length,
+    skippedCount: skipped.length,
+    conflictCount: conflicts.length,
+    candidates,
+    created,
+    skipped,
+    conflicts,
+  };
+}
+
 /* ---------------- reset to Linda's standard schedule ---------------- */
 
 
