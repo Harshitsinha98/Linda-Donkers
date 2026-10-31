@@ -595,7 +595,7 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
     all<{ starts_at: string; duration_min: number }>(
       "SELECT starts_at, duration_min FROM sessions " +
       "WHERE id <> ? AND status = 'published' AND booking_mode = 'scheduled' " +
-      "AND starts_at < ? AND datetime(starts_at, '+' || duration_min || ' minutes') > ?",
+      "AND starts_at < ? AND starts_at > ?",
       [sessionId, maxIso, minIso],
     ),
     all<{
