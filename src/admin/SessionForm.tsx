@@ -2,7 +2,15 @@ import { useRef, useState } from "react";
 import { ApiError } from "../lib/api";
 import { adminApi, CATEGORY_LABELS, type AdminSession } from "./adminApi";
 import { fileToDataUrl } from "./image";
+import { nextWeekday, TEMPLATES } from "./templates";
 import { Btn, ErrorNote, input, Label, Modal } from "./ui";
+
+/** Category picker groups. "online" is no longer a type: online is a checkbox on a yoga or healing session. */
+const CATEGORY_GROUPS: [string, string[]][] = [
+  ["Kundalini Yoga", ["yoga", "gong", "workshop"]],
+  ["Massage & healing", ["massage", "healing"]],
+  ["Other", ["retreat", "other"]],
+];
 
 type Form = {
   titleNl: string;
@@ -56,6 +64,27 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
   const editing = !!session;
+  const [templateId, setTemplateId] = useState("");
+
+  const applyTemplate = (id: string) => {
+    setTemplateId(id);
+    const tpl = TEMPLATES.find((x) => x.id === id);
+    if (!tpl) return;
+    setF((x) => {
+      const startTime = tpl.fields.startTime ?? x.startTime;
+      return {
+        ...x,
+        ...tpl.fields,
+        startTime,
+        date: tpl.weekday !== undefined ? nextWeekday(tpl.weekday, startTime) : x.date,
+        venue: tpl.fields.isOnline ? "" : x.venue,
+        address: tpl.fields.isOnline ? "" : x.address,
+        // Weekly classes are usually planned as a series (12 weeks); massages and healings are one-off.
+        repeatWeeks: tpl.weekday !== undefined ? "11" : "0",
+      };
+    });
+    setError("");
+  };
 
   // Cover photo. `imageData` is a freshly chosen image; `removeImage` clears the existing one.
   const [imageData, setImageData] = useState("");
@@ -123,6 +152,24 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
   return (
     <Modal title={editing ? "Edit session" : "New session"} onClose={onClose} wide>
       <form onSubmit={save} className="grid gap-5 sm:grid-cols-2" noValidate>
+        {!editing && (
+          <div className="rounded-2xl border border-saffron/30 bg-saffron/5 p-4 sm:col-span-2">
+            <Label text="Start from a template (optional)" hint="Fills in title, type, time, duration and price. You can still change everything.">
+              <select className={input} value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
+                <option value="">Choose one of your regular sessions…</option>
+                {(["Kundalini Yoga", "Massage & healing"] as const).map((g) => (
+                  <optgroup key={g} label={g}>
+                    {TEMPLATES.filter((x) => x.group === g).map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </Label>
+          </div>
+        )}
         <Label text="Title (Dutch) *" className="sm:col-span-2">
           <input className={input} value={f.titleNl} onChange={(e) => set("titleNl", e.target.value)} placeholder="bv. Kundalini Yoga & gongbad" />
         </Label>
@@ -170,10 +217,15 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
 
         <Label text="Type">
           <select className={input} value={f.category} onChange={(e) => set("category", e.target.value)}>
-            {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
+            {f.category === "online" && <option value="online">{CATEGORY_LABELS.online}</option>}
+            {CATEGORY_GROUPS.map(([label, keys]) => (
+              <optgroup key={label} label={label}>
+                {keys.map((k) => (
+                  <option key={k} value={k}>
+                    {CATEGORY_LABELS[k]}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </Label>

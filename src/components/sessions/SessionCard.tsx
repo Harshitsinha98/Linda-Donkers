@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useLang } from "../../i18n/LanguageContext";
 import { ROUTES, sm } from "../../data/site";
-import { categoryImage, fmtEuro, fmtParts, type PublicSession } from "../../lib/api";
+import { fallbackImage, fmtEuro, fmtParts, type PublicSession } from "../../lib/api";
 import { Arrow } from "../Arrow";
 
 export function SessionCard({ s }: { s: PublicSession }) {
@@ -18,7 +18,7 @@ export function SessionCard({ s }: { s: PublicSession }) {
     >
       <div className="relative h-40 overflow-hidden">
         <img
-          src={s.imageUrl || sm(categoryImage(s.category))}
+          src={s.imageUrl || sm(fallbackImage(s))}
           alt=""
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-[1.2s] group-hover:scale-105"
@@ -32,9 +32,18 @@ export function SessionCard({ s }: { s: PublicSession }) {
             {d.month}
           </span>
         </div>
-        <span className="absolute right-3 top-3 rounded-full bg-linen/90 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-forest">
-          {t.categories[s.category] ?? t.categories.other}
-        </span>
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
+          {s.category !== "online" && (
+            <span className="rounded-full bg-linen/90 px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-forest">
+              {t.categories[s.category] ?? t.categories.other}
+            </span>
+          )}
+          {(s.isOnline || s.category === "online") && (
+            <span className="rounded-full bg-saffron px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-linen">
+              {t.agenda.online}
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex flex-1 flex-col p-6">
         <h3 className="font-display text-2xl font-light leading-snug text-ink transition-colors group-hover:text-saffron">

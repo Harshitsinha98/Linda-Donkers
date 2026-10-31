@@ -66,8 +66,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   gong: "Gong meditation",
   workshop: "Workshop",
   massage: "Massage",
-  healing: "Healing",
-  online: "Online session",
+  healing: "Healing (Sat Nam Rasayan)",
+  online: "Online (old type: please pick Yoga or Healing and tick 'online')",
   retreat: "Retreat / travel",
   other: "Other",
 };
