@@ -40,7 +40,7 @@ type BtnProps = {
 /** Pill button with a liquid fill on hover and magnetic pull. */
 export function Button({ children, to, href, variant = "primary", className = "", onClick, type = "button" }: BtnProps) {
   const base =
-    "group relative inline-flex items-center gap-3 overflow-hidden rounded-full px-7 py-4 text-[0.82rem] font-semibold uppercase tracking-[0.16em] transition-colors duration-500";
+    "group relative isolate inline-flex items-center gap-3 overflow-hidden rounded-full px-7 py-4 text-[0.82rem] font-semibold uppercase tracking-[0.16em] transition-colors duration-500";
   const styles = {
     primary: "bg-saffron text-linen",
     ghost: "border border-forest/25 text-forest hover:text-linen",
@@ -48,14 +48,20 @@ export function Button({ children, to, href, variant = "primary", className = ""
     violet: "border border-violet/35 text-aubergine hover:text-linen",
   }[variant];
   const fill = { primary: "bg-forest", ghost: "bg-forest", light: "bg-linen", violet: "bg-violet" }[variant];
+  const labelColor = {
+    primary: "text-linen group-hover:text-linen",
+    ghost: "text-forest group-hover:text-linen",
+    light: "text-linen group-hover:text-ink",
+    violet: "text-aubergine group-hover:text-linen",
+  }[variant];
 
   const inner = (
     <>
       <span
         className={`absolute inset-0 translate-y-[115%] rounded-[50%] ${fill} transition-[transform,border-radius] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-y-0 group-hover:rounded-none`}
       />
-      <span className="relative z-10">{children}</span>
-      <span className="relative z-10 transition-transform duration-500 group-hover:translate-x-1" aria-hidden>
+      <span className={`relative z-10 transition-colors duration-300 ${labelColor}`}>{children}</span>
+      <span className={`relative z-10 transition-[transform,color] duration-500 group-hover:translate-x-1 ${labelColor}`} aria-hidden>
         <Arrow className="h-4 w-4" />
       </span>
     </>
