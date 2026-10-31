@@ -1,5 +1,9 @@
 {
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/api/session-image", "destination": "/api/sessions?asset=image" },
+    { "source": "/api/membership-checkout", "destination": "/api/memberships" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(assets|images)/(.*)",
