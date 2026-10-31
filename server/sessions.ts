@@ -307,6 +307,23 @@ export async function updateSession(id: string, input: SessionInput) {
   if (input.capacity < existing.taken) {
     throw new HttpError(409, "capacity_too_low", `${existing.taken} places are already booked. Capacity can't be lower than that.`);
   }
+  const activeAppointmentCount = await get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM bookings WHERE session_id = ? AND appointment_start_at IS NOT NULL AND status IN ('confirmed','pending')",
+    [id],
+  );
+  const previousRule = parseAvailability(existing.availability_rule);
+  const nextRule = input.availability.enabled ? input.availability : null;
+  const stable = (rule: AvailabilityRule | null) => rule ? JSON.stringify({
+    enabled: rule.enabled,
+    startDate: rule.startDate,
+    weekdays: [...rule.weekdays].sort((a, b) => a - b),
+    intervalWeeks: rule.intervalWeeks,
+    slotTimes: [...rule.slotTimes].sort(),
+    bufferMinutes: rule.bufferMinutes,
+  }) : "";
+  if ((activeAppointmentCount?.n ?? 0) > 0 && stable(previousRule) !== stable(nextRule)) {
+    throw new HttpError(409, "availability_has_bookings", "This recurring availability has active appointment bookings. Cancel or reschedule those bookings before changing its weekdays, slots, duration or end date.");
+  }
   const base = columns(input);
   const cols: Record<string, string | number> =
     input.removeImage ? { ...base, image: "" }
