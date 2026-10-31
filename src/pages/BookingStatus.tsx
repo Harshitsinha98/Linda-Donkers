@@ -66,7 +66,7 @@ export default function BookingStatus() {
 
   const s = b?.session;
   const appt = s?.bookingMode === "appointment";
-  const when = s ? (appt ? st.appointment : fmtLong(s.startsAt, lang)) : "";
+  const when = s ? (appt && !b?.appointmentStartAt ? st.appointment : fmtLong(b?.appointmentStartAt || s.startsAt, lang)) : "";
   const where = s ? (s.isOnline ? t.agenda.online : [s.venue, s.address].filter(Boolean).join(", ")) : "";
 
   return (
@@ -115,12 +115,12 @@ export default function BookingStatus() {
                   value={
                     <>
                       <span className="inline-block first-letter:uppercase">{when}</span>
-                      {appt && b.preferred && (
+                      {appt && !b.appointmentStartAt && b.preferred && (
                         <span className="block text-sm text-forest/70">
                           {st.preferred}: {b.preferred}
                         </span>
                       )}
-                      {appt && b.status === "confirmed" && <span className="block text-sm text-forest/70">{st.appointmentText}</span>}
+                      {appt && !b.appointmentStartAt && b.status === "confirmed" && <span className="block text-sm text-forest/70">{st.appointmentText}</span>}
                     </>
                   }
                 />
