@@ -92,8 +92,10 @@ export const checkoutInput = z.object({
   membershipId: z.string().max(64).default(""),
   // "By appointment" sessions: the customer's preferred day and time.
   preferred: z.string().trim().max(300).default(""),
-  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(""),
-  appointmentTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default(""),
+  // Legacy "by appointment" and fixed-date services do not send a selected slot.
+  // Accept empty strings explicitly; .default("") alone only handles undefined.
+  appointmentDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal("")]).default(""),
+  appointmentTime: z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal("")]).default(""),
 });
 
 type NewBooking = Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">;
@@ -122,6 +124,14 @@ async function insertIfCapacity(b: NewBooking) {
              WHERE x.id <> ? AND x.status = 'published' AND x.booking_mode = 'scheduled'
                AND julianday(x.starts_at) < julianday(?)
                AND julianday(x.starts_at) + (x.duration_min / 1440.0) > julianday(?)
+               AND NOT (
+                 (
+                   COALESCE(x.offering, '') <> ''
+                   AND COALESCE(x.offering, '') = (SELECT COALESCE(target.offering, '') FROM sessions target WHERE target.id = ?)
+                 )
+                 OR lower(trim(x.title_nl)) = (SELECT lower(trim(target.title_nl)) FROM sessions target WHERE target.id = ?)
+                 OR lower(trim(x.title_en)) = (SELECT lower(trim(target.title_en)) FROM sessions target WHERE target.id = ?)
+               )
            )
          )
        )`,
@@ -131,7 +141,7 @@ async function insertIfCapacity(b: NewBooking) {
       b.appointment_start_at, b.appointment_end_at,
       now, b.session_id, now, b.seats,
       b.appointment_start_at, now, b.appointment_end_at, b.appointment_start_at,
-      b.session_id, b.appointment_end_at, b.appointment_start_at,
+      b.session_id, b.appointment_end_at, b.appointment_start_at, b.session_id, b.session_id, b.session_id,
     ],
   );
 }
@@ -470,8 +480,8 @@ export const manualInput = z.object({
   seats: z.number().int().min(1).max(100),
   amountCents: z.number().int().min(0).max(10_000_000).default(0),
   sendEmail: z.boolean().default(false),
-  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(""),
-  appointmentTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default(""),
+  appointmentDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal("")]).default(""),
+  appointmentTime: z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal("")]).default(""),
 });
 
 /** For bookings Linda takes herself (WhatsApp, cash, at the door). Still respects capacity. */

@@ -39,6 +39,7 @@ function BookingForm({ s }: { s: PublicSession }) {
   const [appointmentTime, setAppointmentTime] = useState("");
   const [availableSlots, setAvailableSlots] = useState<{ time: string; startsAt: string; endsAt: string }[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotError, setSlotError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
@@ -68,12 +69,17 @@ function BookingForm({ s }: { s: PublicSession }) {
     if (!appt || !s.availability?.enabled || !appointmentDate) return;
     let active = true;
     setSlotsLoading(true);
+    setSlotError("");
     setAppointmentTime("");
     api<{ slots: { time: string; startsAt: string; endsAt: string }[] }>(
       `/api/sessions?availabilityFor=${encodeURIComponent(s.id)}&date=${encodeURIComponent(appointmentDate)}`,
     )
       .then((d) => active && setAvailableSlots(d.slots))
-      .catch(() => active && setAvailableSlots([]))
+      .catch((err) => {
+        if (!active) return;
+        setAvailableSlots([]);
+        setSlotError(err instanceof ApiError ? err.message : "Could not load available times. Please refresh and try again.");
+      })
       .finally(() => active && setSlotsLoading(false));
     return () => { active = false; };
   }, [appt, s.id, s.availability?.enabled, appointmentDate]);
@@ -139,7 +145,7 @@ function BookingForm({ s }: { s: PublicSession }) {
                       : code === "login_required"
                         ? b.errors.login
                         : code === "invalid_input"
-                          ? b.errors.email
+                          ? (err instanceof ApiError && err.message ? err.message : b.errors.generic)
                           : b.errors.generic,
       );
       setBusy(false);
@@ -225,6 +231,10 @@ function BookingForm({ s }: { s: PublicSession }) {
               <span className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{lang === "en" ? "Available time slots" : "Beschikbare tijdsloten"}</span>
               {slotsLoading ? (
                 <p className="mt-2 text-sm text-forest/60">{lang === "en" ? "Checking availability…" : "Beschikbaarheid controleren…"}</p>
+              ) : slotError ? (
+                <p role="alert" className="mt-2 rounded-xl bg-sand/60 px-4 py-3 text-sm text-forest/80">
+                  {lang === "en" ? "Availability could not be loaded: " : "Beschikbaarheid kon niet worden geladen: "}{slotError}
+                </p>
               ) : availableSlots.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {availableSlots.map((slot) => (

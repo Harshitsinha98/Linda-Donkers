@@ -2,6 +2,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { useLang } from "../i18n/LanguageContext";
 import { IMG, ROUTES, sm, waLink } from "../data/site";
+import { useSessions, type PublicSession } from "../lib/api";
 
 /** Linda's own photos per treatment. M.E.R. and Chi Nei Tsang reuse her massage photos until dedicated ones exist. */
 const TREATMENT_IMG: Record<string, string> = {
@@ -37,8 +38,47 @@ function Waves() {
   );
 }
 
+const TREATMENT_OFFERINGS: Record<string, string[]> = {
+  mer: ["mer"],
+  lomi: ["lomi"],
+  chinei: ["chinei"],
+  satnam: ["satnam-live", "satnam-online"],
+};
+
+function titleMatchesOffering(s: PublicSession, key: string): boolean {
+  const title = (s.title.nl + " " + s.title.en)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (key === "mer") return /m\.?e\.?r\b|myo fascia|fascia energetic/i.test(title);
+  if (key === "lomi") return /lomi lomi nui/i.test(title);
+  if (key === "chinei") return /chi nei tsang|taoistic.*belly|taoistische.*buik/i.test(title);
+  if (key === "satnam-live") return !s.isOnline && /sat.?nam|rasayan/i.test(title);
+  if (key === "satnam-online") return s.isOnline && /sat.?nam|rasayan/i.test(title);
+  return false;
+}
+
+/** Return one direct Agenda booking link per treatment offering, not one for every weekly occurrence. */
+function sessionsForTreatment(list: PublicSession[] | null, key: string): PublicSession[] {
+  if (!list) return [];
+  const offerings = TREATMENT_OFFERINGS[key] ?? [];
+  return offerings
+    .map((offering) => {
+      const exact = list.filter((s) => s.status === "published" && s.offering === offering);
+      const fallback = list.filter((s) => s.status === "published" && !s.offering && titleMatchesOffering(s, offering));
+      const candidates = exact.length ? exact : fallback;
+      return candidates.sort((a, b) => {
+        const mode = Number(b.bookingMode === "appointment") - Number(a.bookingMode === "appointment");
+        return mode || Date.parse(a.startsAt) - Date.parse(b.startsAt);
+      })[0];
+    })
+    .filter((s): s is PublicSession => !!s);
+}
+
 export default function Massage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const { sessions: agendaSessions } = useSessions(200);
   const m = t.massage;
   usePageTitle(t.meta.massage);
 
@@ -83,6 +123,17 @@ export default function Massage() {
                     <div className="mt-5 space-y-3 text-forest/75">
                       {tr.text.map((line) => (
                         <p key={line}>{line}</p>
+                      ))}
+                    </div>
+                    <div className="mt-6 flex flex-wrap gap-2">
+                      {sessionsForTreatment(agendaSessions, tr.key).map((session) => (
+                        <Button key={session.id} to={`${ROUTES.agenda}/${session.id}`} variant="ghost">
+                          {tr.key === "satnam"
+                            ? session.isOnline
+                              ? (lang === "en" ? "Book online healing" : "Boek online healing")
+                              : (lang === "en" ? "Book live healing" : "Boek live healing")
+                            : (lang === "en" ? "Book this treatment" : "Boek deze behandeling")}
+                        </Button>
                       ))}
                     </div>
                     {tr.package && (

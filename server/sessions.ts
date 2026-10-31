@@ -578,6 +578,21 @@ const IN_PERSON_VENUE = "Diamond Yoga · Deurne (Antwerpen)";
 
 type BusyInterval = { startsAt: number; endsAt: number };
 
+function normalizedSessionTitle(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function sameCalendarService(
+  base: { offering: string; category: string; title_nl: string; title_en: string },
+  other: { offering: string; category: string; title_nl: string; title_en: string },
+): boolean {
+  if (base.offering && other.offering && base.offering === other.offering) return true;
+  if (base.category !== other.category) return false;
+  const baseTitles = [base.title_nl, base.title_en].filter(Boolean).map(normalizedSessionTitle);
+  const otherTitles = [other.title_nl, other.title_en].filter(Boolean).map(normalizedSessionTitle);
+  return baseTitles.some((a) => otherTitles.some((b) => a === b));
+}
+
 function intervalsOverlap(a: BusyInterval, b: BusyInterval): boolean {
   return a.startsAt < b.endsAt && a.endsAt > b.startsAt;
 }
@@ -620,10 +635,10 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
       "AND (status = 'confirmed' OR (status = 'pending' AND hold_until > ?))",
       [maxIso, minIso, nowIso()],
     ),
-    all<{ starts_at: string; duration_min: number }>(
-      "SELECT starts_at, duration_min FROM sessions " +
+    all<{ starts_at: string; duration_min: number; offering: string; category: string; title_nl: string; title_en: string }>(
+      "SELECT starts_at, duration_min, offering, category, title_nl, title_en FROM sessions " +
       "WHERE id <> ? AND status = 'published' AND booking_mode = 'scheduled' " +
-      "AND starts_at < ? AND starts_at > ?",
+      "AND starts_at < ? AND julianday(starts_at) + (duration_min / 1440.0) > julianday(?)",
       [sessionId, maxIso, minIso],
     ),
     all<{
@@ -631,8 +646,12 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
       date: string;
       duration_min: number;
       availability_rule: string;
+      offering: string;
+      category: string;
+      title_nl: string;
+      title_en: string;
     }>(
-      "SELECT id, date, duration_min, availability_rule FROM sessions " +
+      "SELECT id, date, duration_min, availability_rule, offering, category, title_nl, title_en FROM sessions " +
       "WHERE id <> ? AND status = 'published' AND booking_mode = 'appointment' AND availability_rule <> ''",
       [sessionId],
     ),
@@ -642,12 +661,17 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
     startsAt: Date.parse(b.appointment_start_at),
     endsAt: Date.parse(b.appointment_end_at),
   }));
-  const fixedIntervals: BusyInterval[] = fixedSessions.map((x) => {
-    const start = Date.parse(x.starts_at);
-    return { startsAt: start, endsAt: start + x.duration_min * 60_000 };
-  });
+  // Older weekly occurrences with the same offering are instances of this service, not
+  // competing appointments. Do not hide their own slot; only unrelated services block it.
+  const fixedIntervals: BusyInterval[] = fixedSessions
+    .filter((x) => !sameCalendarService(s, x))
+    .map((x) => {
+      const start = Date.parse(x.starts_at);
+      return { startsAt: start, endsAt: start + x.duration_min * 60_000 };
+    });
   const recurringIntervals: BusyInterval[] = [];
   for (const other of otherRecurring) {
+    if (sameCalendarService(s, other)) continue;
     const otherRule = parseAvailability(other.availability_rule);
     if (!otherRule || !isRecurringDate(dateValue, other.date, otherRule)) continue;
     for (const timeValue of otherRule.slotTimes) {
