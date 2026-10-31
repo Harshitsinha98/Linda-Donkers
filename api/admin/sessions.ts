@@ -11,6 +11,7 @@ import {
   rowToInput,
   sessionInput,
   updateSession,
+  syncMissingStandard,
 } from "../../server/sessions.js";
 
 /** GET /api/admin/sessions?scope=upcoming|past */
@@ -50,6 +51,10 @@ export const POST = handler(async (req) => {
     }
     case "cancel":
       return json({ ok: true, ...(await cancelSession(body.id, siteUrl(req))) });
+    case "previewStandard":
+      return json({ ok: true, ...(await syncMissingStandard(body.weeks, true)) });
+    case "createMissingStandard":
+      return json({ ok: true, ...(await syncMissingStandard(body.weeks, false)) });
     case "reset": {
       const result = await resetToStandard(body.weeks);
       const plansCreated = await seedDefaultPlans();
