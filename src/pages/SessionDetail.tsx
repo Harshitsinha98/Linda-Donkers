@@ -376,9 +376,11 @@ export default function SessionDetail() {
               <dl className="mt-10 grid gap-x-8 gap-y-6 border-y border-forest/10 py-8 sm:grid-cols-2">
                 <div>
                   <dt className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{t.booking.status.when}</dt>
-                  <dd className="mt-1 text-lg text-ink first-letter:uppercase">{appt ? a.appointment : fmtLong(s.startsAt, lang)}</dd>
+                  <dd className="mt-1 text-lg text-ink first-letter:uppercase">{appt && s.availability?.enabled
+                    ? (lang === "en" ? "Every " : "Elke ") + s.availability.intervalWeeks + (lang === "en" ? " week(s)" : " week/weken") + " · " + s.availability.weekdays.map((d) => (lang === "en" ? ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] : ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"])[d]).join(", ")
+                    : appt ? a.appointment : fmtLong(s.startsAt, lang)}</dd>
                   <dd className="text-sm text-forest/60">
-                    {s.durationMin} {a.min} · {appt ? a.appointmentHint : a.timezone}
+                    {s.durationMin} {a.min} · {appt && s.availability?.enabled ? s.availability.slotTimes.join(", ") + " · " + (lang === "en" ? "Book until " : "Boeken tot ") + s.date : appt ? a.appointmentHint : a.timezone}
                   </dd>
                 </div>
                 <div>
