@@ -92,8 +92,10 @@ export const checkoutInput = z.object({
   membershipId: z.string().max(64).default(""),
   // "By appointment" sessions: the customer's preferred day and time.
   preferred: z.string().trim().max(300).default(""),
-  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(""),
-  appointmentTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default(""),
+  // Legacy "by appointment" and fixed-date services do not send a selected slot.
+  // Accept empty strings explicitly; .default("") alone only handles undefined.
+  appointmentDate: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal("")]).default(""),
+  appointmentTime: z.union([z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), z.literal("")]).default(""),
 });
 
 type NewBooking = Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">;
