@@ -124,6 +124,10 @@ async function insertIfCapacity(b: NewBooking) {
              WHERE x.id <> ? AND x.status = 'published' AND x.booking_mode = 'scheduled'
                AND julianday(x.starts_at) < julianday(?)
                AND julianday(x.starts_at) + (x.duration_min / 1440.0) > julianday(?)
+               AND NOT (
+                 COALESCE(x.offering, '') <> ''
+                 AND COALESCE(x.offering, '') = (SELECT COALESCE(target.offering, '') FROM sessions target WHERE target.id = ?)
+               )
            )
          )
        )`,
@@ -133,7 +137,7 @@ async function insertIfCapacity(b: NewBooking) {
       b.appointment_start_at, b.appointment_end_at,
       now, b.session_id, now, b.seats,
       b.appointment_start_at, now, b.appointment_end_at, b.appointment_start_at,
-      b.session_id, b.appointment_end_at, b.appointment_start_at,
+      b.session_id, b.appointment_end_at, b.appointment_start_at, b.session_id,
     ],
   );
 }
