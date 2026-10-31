@@ -24,7 +24,22 @@ npm run build    # typecheck (site + api) + production build in dist/
 - **Cancellation policy:** 48h or more before the session: 100% refund. 24–48h: 50%. Under 24h: 0%. Refunds go through Stripe automatically. If Linda cancels a session, everyone gets 100%.
 - **Emails (Resend):** booking confirmation to the customer (with manage/cancel link and WhatsApp button) and a "new booking" email to Linda (`ADMIN_EMAIL`), plus cancellation emails. If Resend isn't configured, bookings still work and the emails are skipped (logged).
 
-API: `GET /api/sessions`, `POST /api/checkout`, `GET|POST /api/booking`, `POST /api/stripe-webhook`, `/api/admin/sessions`, `/api/admin/bookings`. Shared server code is in `server/`.
+### Booking sections, discount codes & memberships
+
+- **Agenda** has three sections: Yoga, Massage & healing, Online. Classes have fixed dates; massages and healings are booked **by appointment** (the customer pays and gives a preferred day/time, Linda confirms it). Every session has its own photo (pick one of Linda's photos in the session form, or upload one); photos are cropped on her face, not the middle of the picture.
+- **Reset to standard schedule** (admin → Sessions): deletes every session nobody has booked and creates the regular offer from `shared/catalog.ts` (weekly classes for N weeks + the appointment sessions). Booked sessions are kept and listed.
+- **Discount codes** (admin → Coupons): % or € off, valid for everything / a section / memberships, date range, total uses, uses per email, minimum amount. Entered on the booking form and on the membership form; checked again on the server at checkout. A use is reserved when checkout starts and released if the payment doesn't complete.
+- **Memberships** (admin → Memberships): Linda defines cards (price, number of sessions or unlimited, validity in days, which sessions it covers). Sold on `/lidmaatschap` via Stripe; the buyer must be logged in. After payment the customer gets an email with the details. Logged-in customers see their cards and bookings on `/account`, and can choose "Pay with my membership" when booking (1 session off the card, returned when cancelled 48h+ before). Linda can also add a card for someone who paid cash, adjust sessions/end date, or cancel (with Stripe refund).
+- **Login**: Supabase Auth, Google (Gmail) or an email login link. Supabase is only used for identity; all data stays in Turso. The API verifies the token with Supabase (`server/auth.ts`).
+
+### Supabase setup (login)
+
+1. Create a project at supabase.com. In Project Settings → API copy the **Project URL** and the **anon / publishable key** into `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Vercel, all environments), then redeploy.
+2. Authentication → URL Configuration: Site URL `https://www.lindadonkers.com`, and add redirect URLs `https://www.lindadonkers.com/**` and `http://localhost:5173/**`.
+3. Authentication → Sign In / Providers → **Google**: enable it with a Client ID and Secret from Google Cloud Console (APIs & Services → Credentials → OAuth client ID, type Web; authorised redirect URI = the callback URL Supabase shows, `https://<project>.supabase.co/auth/v1/callback`).
+4. Email (magic link) works out of the box with Supabase's test mailer (low hourly limit). For production, set custom SMTP in Authentication → Emails (e.g. Resend's SMTP) so login emails come from lindadonkers.com.
+
+API: `GET /api/sessions`, `POST /api/checkout`, `GET|POST /api/booking`, `POST /api/stripe-webhook`, `/api/admin/sessions`, `/api/admin/bookings`, `POST /api/coupon`, `GET /api/memberships`, `POST /api/membership-checkout`, `GET /api/account`, `/api/admin/coupons`, `/api/admin/memberships`. Shared server code is in `server/`.
 
 ### Go-live checklist
 
@@ -47,6 +62,7 @@ API: `GET /api/sessions`, `POST /api/checkout`, `GET|POST /api/booking`, `POST /
 | Booking emails | `server/email.ts` |
 | Refund policy | `server/bookings.ts` (`refundPercent`) + texts in `content.ts` |
 | Admin panel | `src/admin/` |
+| Regular offer, prices, default photos, standard membership cards | `shared/catalog.ts` |
 | Colours & fonts | `src/index.css` (`@theme`) |
 | Photos | `public/images/` (`name.webp` + `name-sm.webp`, max ~1600px) |
 | Logo / favicon | `src/components/Logo.tsx`, `public/favicon.svg` |

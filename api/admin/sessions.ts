@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { cancelSession } from "../../server/bookings.js";
+import { seedDefaultPlans } from "../../server/memberships.js";
 import { handler, HttpError, json, query, readBody, requireAdmin, siteUrl } from "../../server/http.js";
 import {
   createSessions,
   deleteSession,
   getSessionRow,
   listAdmin,
+  resetToStandard,
   rowToInput,
   sessionInput,
   updateSession,
@@ -23,9 +25,11 @@ const postBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("duplicate"), id: z.string().min(1) }),
   z.object({ action: z.literal("cancel"), id: z.string().min(1) }),
   z.object({ action: z.literal("publish"), id: z.string().min(1), publish: z.boolean() }),
+  // Deletes all sessions without live bookings and creates Linda's standard schedule.
+  z.object({ action: z.literal("reset"), weeks: z.number().int().min(1).max(26).default(8), confirm: z.literal("RESET") }),
 ]);
 
-/** POST /api/admin/sessions { action: create | duplicate | cancel | publish } */
+/** POST /api/admin/sessions { action: create | duplicate | cancel | publish | reset } */
 export const POST = handler(async (req) => {
   requireAdmin(req);
   const body = await readBody(req, postBody);
@@ -46,6 +50,11 @@ export const POST = handler(async (req) => {
     }
     case "cancel":
       return json({ ok: true, ...(await cancelSession(body.id, siteUrl(req))) });
+    case "reset": {
+      const result = await resetToStandard(body.weeks);
+      const plansCreated = await seedDefaultPlans();
+      return json({ ok: true, ...result, plansCreated });
+    }
   }
 });
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Lang } from "../i18n/content";
 import { IMG, sm } from "../data/site";
+import { OFFERINGS, PHOTO_FOCUS, type PhotoKey, type Section } from "../../shared/catalog";
 
 export type PublicSession = {
   id: string;
@@ -20,6 +21,10 @@ export type PublicSession = {
   maxPerBooking: number;
   hasImage: boolean;
   imageUrl: string;
+  imageKey: string;
+  offering: string;
+  bookingMode: "scheduled" | "appointment";
+  section: Section | "other";
   status: "draft" | "published" | "cancelled";
 };
 
@@ -35,6 +40,46 @@ export type BookingView = {
   session: PublicSession;
   onlineLink: string;
   cancel: { allowed: boolean; percent: number; cents: number };
+  couponCode: string;
+  discountCents: number;
+  paidWithMembership: boolean;
+  preferred: string;
+};
+
+export type MembershipPlan = {
+  id: string;
+  name: { nl: string; en: string };
+  description: { nl: string; en: string };
+  priceCents: number;
+  credits: number;
+  validityDays: number;
+  scope: string[];
+  photo: string;
+  status: string;
+};
+
+export type MembershipView = {
+  id: string;
+  ref: string;
+  planId: string;
+  name: { nl: string; en: string };
+  photo: string;
+  holder: string;
+  email: string;
+  phone: string;
+  creditsTotal: number;
+  creditsUsed: number;
+  creditsLeft: number | null;
+  scope: string[];
+  amountCents: number;
+  couponCode: string;
+  discountCents: number;
+  source: "web" | "manual";
+  status: "pending" | "active" | "expired" | "cancelled";
+  startsAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  paidOnline: boolean;
 };
 
 export class ApiError extends Error {
@@ -83,72 +128,61 @@ export function fmtParts(iso: string, lang: Lang) {
 export const fmtLong = (iso: string, lang: Lang) =>
   `${new Intl.DateTimeFormat(loc(lang), { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(iso))} · ${fmtParts(iso, lang).time}`;
 
+export const fmtDate = (iso: string, lang: Lang) =>
+  new Intl.DateTimeFormat(loc(lang), { timeZone: TZ, day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
+
 export const fmtEuro = (cents: number, lang: Lang) =>
   new Intl.NumberFormat(lang === "en" ? "en-IE" : "nl-BE", { style: "currency", currency: "EUR" }).format(cents / 100);
 
-const CATEGORY_IMAGE: Record<string, string> = {
-  yoga: IMG.twist,
-  gong: IMG.arms,
-  workshop: IMG.smile,
-  massage: IMG.lomi1,
-  healing: IMG.selflove,
-  online: IMG.selflove,
-  retreat: IMG.goldenTemple,
+const CATEGORY_IMAGE: Record<string, PhotoKey> = {
+  yoga: "twist",
+  gong: "arms",
+  workshop: "smile",
+  massage: "lomi1",
+  healing: "selflove",
+  online: "selflove",
+  retreat: "goldenTemple",
 };
 
-/** Fallback photo per category, used when a session has no uploaded image. */
-export const categoryImage = (category: string) => CATEGORY_IMAGE[category] ?? IMG.portrait;
+/** Default photo per offering (Linda's regular sessions), so each one has its own picture. */
+const OFFERING_PHOTO: Record<string, PhotoKey> = Object.fromEntries(OFFERINGS.map((o) => [o.key, o.photo]));
 
-/**
- * The agenda groups sessions into two main offers: yoga and massage/healing.
- * Online is not a group of its own: it's a property (`isOnline`) of a yoga or healing session.
- * Legacy sessions saved with the old "online" category are shown under yoga.
- */
-export type CategoryGroup = "yoga" | "massage" | "retreat" | "other";
-const GROUP_OF: Record<string, CategoryGroup> = {
-  yoga: "yoga",
-  gong: "yoga",
-  workshop: "yoga",
-  online: "yoga",
-  massage: "massage",
-  healing: "massage",
-  retreat: "retreat",
-};
-export const categoryGroup = (category: string): CategoryGroup => GROUP_OF[category] ?? "other";
-
-/** Title keywords -> the most fitting of Linda's own photos. */
-const TITLE_IMAGE: [RegExp, string][] = [
-  [/lomi/i, IMG.lomi1],
-  [/m\.?e\.?r\b|myo|fascia/i, IMG.lomi3],
-  [/chi nei|tao|buik|belly|orgaan|organ/i, IMG.lomi2],
-  [/sat ?nam|rasayan/i, IMG.selflove],
-  [/priv|coach/i, IMG.smile],
+/** Title keywords -> the most fitting of Linda's own photos (sessions created before offerings existed). */
+const TITLE_IMAGE: [RegExp, PhotoKey][] = [
+  [/lomi/i, "lomi1"],
+  [/m\.?e\.?r\b|myo|fascia/i, "lomi3"],
+  [/chi nei|tao|buik|belly|orgaan|organ/i, "lomi2"],
+  [/sat ?nam|rasayan/i, "selflove"],
+  [/priv|coach/i, "smile"],
 ];
 
-/** Default photo for a session without an upload: matched on the title first, then the category. */
-export function fallbackImage(s: { category: string; title?: { nl: string; en: string }; isOnline?: boolean }): string {
+export const photoSrc = (key: string) => IMG[(key in IMG ? key : "portrait") as keyof typeof IMG];
+export const photoFocus = (key: string) => PHOTO_FOCUS[key as PhotoKey] ?? "50% 30%";
+
+type ImgInput = { category: string; imageUrl?: string; imageKey?: string; offering?: string; title?: { nl: string; en: string }; isOnline?: boolean };
+
+/** Which of Linda's photos to use for a session without an upload. */
+export function fallbackPhoto(s: ImgInput): PhotoKey {
+  if (s.imageKey && s.imageKey in PHOTO_FOCUS) return s.imageKey as PhotoKey;
+  if (s.offering && OFFERING_PHOTO[s.offering]) return OFFERING_PHOTO[s.offering];
   const text = s.title ? `${s.title.nl} ${s.title.en}` : "";
-  for (const [re, img] of TITLE_IMAGE) if (re.test(text)) return img;
-  if (s.isOnline && categoryGroup(s.category) === "yoga") return IMG.arms;
-  return categoryImage(s.category);
-}
-
-type ImgInput = { category: string; imageUrl?: string; title?: { nl: string; en: string }; isOnline?: boolean };
-
-/** The photo to show for a session: Linda's uploaded image if there is one, else a fitting default. */
-export function sessionImage(s: ImgInput): string {
-  return s.imageUrl || fallbackImage(s);
+  for (const [re, key] of TITLE_IMAGE) if (re.test(text)) return key;
+  if (s.isOnline && s.category === "yoga") return "arms";
+  return CATEGORY_IMAGE[s.category] ?? "portrait";
 }
 
 /**
- * src + srcSet for a session cover image. Uploaded images are a single file (no -sm
- * variant); the bundled fallbacks have a small variant for lazy lists.
+ * src, srcSet and object-position for a session cover. Uploaded images are a single file
+ * (centred); Linda's own photos have a small variant and a known focus point (her face).
  */
-export function sessionImageSrc(s: ImgInput): { src: string; srcSet?: string } {
-  if (s.imageUrl) return { src: s.imageUrl };
-  const full = fallbackImage(s);
-  return { src: full, srcSet: `${sm(full)} 720w, ${full} 1600w` };
+export function sessionImageSrc(s: ImgInput): { src: string; srcSet?: string; position: string } {
+  if (s.imageUrl) return { src: s.imageUrl, position: "50% 35%" };
+  const key = fallbackPhoto(s);
+  const full = photoSrc(key);
+  return { src: full, srcSet: `${sm(full)} 720w, ${full} 1600w`, position: photoFocus(key) };
 }
+
+export type { Section };
 
 /* ---------------- hooks ---------------- */
 

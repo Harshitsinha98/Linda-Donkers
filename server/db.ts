@@ -79,6 +79,89 @@ const SCHEMA = [
      CHECK (status IN ('subscribed','unsubscribed'))
    )`,
   `CREATE INDEX IF NOT EXISTS subscribers_status ON subscribers (status)`,
+  `CREATE TABLE IF NOT EXISTS coupons (
+     id                 TEXT PRIMARY KEY,
+     code               TEXT NOT NULL UNIQUE,
+     description        TEXT NOT NULL DEFAULT '',
+     kind               TEXT NOT NULL,
+     value              INTEGER NOT NULL,
+     applies_to         TEXT NOT NULL DEFAULT 'all',
+     min_amount_cents   INTEGER NOT NULL DEFAULT 0,
+     max_uses           INTEGER NOT NULL DEFAULT 0,
+     max_uses_per_email INTEGER NOT NULL DEFAULT 1,
+     used_count         INTEGER NOT NULL DEFAULT 0,
+     valid_from         TEXT NOT NULL DEFAULT '',
+     valid_until        TEXT NOT NULL DEFAULT '',
+     active             INTEGER NOT NULL DEFAULT 1,
+     created_at         TEXT NOT NULL,
+     updated_at         TEXT NOT NULL,
+     CHECK (kind IN ('percent','fixed')),
+     CHECK (value >= 1),
+     CHECK (used_count >= 0)
+   )`,
+  `CREATE TABLE IF NOT EXISTS membership_plans (
+     id              TEXT PRIMARY KEY,
+     name_nl         TEXT NOT NULL,
+     name_en         TEXT NOT NULL DEFAULT '',
+     description_nl  TEXT NOT NULL DEFAULT '',
+     description_en  TEXT NOT NULL DEFAULT '',
+     price_cents     INTEGER NOT NULL,
+     credits         INTEGER NOT NULL DEFAULT 0,
+     validity_days   INTEGER NOT NULL,
+     scope           TEXT NOT NULL DEFAULT '[]',
+     photo           TEXT NOT NULL DEFAULT '',
+     sort            INTEGER NOT NULL DEFAULT 0,
+     status          TEXT NOT NULL DEFAULT 'active',
+     created_at      TEXT NOT NULL,
+     updated_at      TEXT NOT NULL,
+     CHECK (price_cents >= 0),
+     CHECK (credits >= 0),
+     CHECK (validity_days >= 1),
+     CHECK (status IN ('active','hidden','archived'))
+   )`,
+  `CREATE TABLE IF NOT EXISTS memberships (
+     id                    TEXT PRIMARY KEY,
+     ref                   TEXT NOT NULL UNIQUE,
+     plan_id               TEXT NOT NULL REFERENCES membership_plans(id),
+     user_id               TEXT NOT NULL DEFAULT '',
+     email                 TEXT NOT NULL,
+     name                  TEXT NOT NULL,
+     phone                 TEXT NOT NULL DEFAULT '',
+     lang                  TEXT NOT NULL DEFAULT 'nl',
+     credits_total         INTEGER NOT NULL,
+     credits_used          INTEGER NOT NULL DEFAULT 0,
+     scope                 TEXT NOT NULL DEFAULT '[]',
+     amount_cents          INTEGER NOT NULL,
+     coupon_code           TEXT NOT NULL DEFAULT '',
+     discount_cents        INTEGER NOT NULL DEFAULT 0,
+     source                TEXT NOT NULL DEFAULT 'web',
+     status                TEXT NOT NULL,
+     starts_at             TEXT,
+     expires_at            TEXT,
+     stripe_checkout_id    TEXT,
+     stripe_payment_intent TEXT,
+     created_at            TEXT NOT NULL,
+     activated_at          TEXT,
+     cancelled_at          TEXT,
+     CHECK (credits_used >= 0),
+     CHECK (status IN ('pending','active','expired','cancelled'))
+   )`,
+  `CREATE INDEX IF NOT EXISTS memberships_user ON memberships (user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS memberships_email ON memberships (email, status)`,
+  `CREATE INDEX IF NOT EXISTS memberships_checkout ON memberships (stripe_checkout_id)`,
+];
+
+/** Columns added after the first release. ALTER fails harmlessly when the column already exists. */
+const MIGRATIONS = [
+  `ALTER TABLE sessions ADD COLUMN image TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN image_key TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN offering TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN booking_mode TEXT NOT NULL DEFAULT 'scheduled'`,
+  `ALTER TABLE bookings ADD COLUMN coupon_code TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE bookings ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE bookings ADD COLUMN membership_id TEXT`,
+  `ALTER TABLE bookings ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE bookings ADD COLUMN preferred TEXT NOT NULL DEFAULT ''`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };
@@ -100,11 +183,12 @@ async function open(): Promise<Client> {
     client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN, intMode: "number" });
   }
   for (const statement of SCHEMA) await client.execute(statement);
-  // Migration for databases created before the `image` column existed.
-  try {
-    await client.execute(`ALTER TABLE sessions ADD COLUMN image TEXT NOT NULL DEFAULT ''`);
-  } catch {
-    /* column already exists */
+  for (const statement of MIGRATIONS) {
+    try {
+      await client.execute(statement);
+    } catch {
+      /* column already exists */
+    }
   }
   return client;
 }
@@ -128,6 +212,11 @@ export async function all<T = Row>(sql: string, args: InValue[] = []): Promise<T
 
 export async function get<T = Row>(sql: string, args: InValue[] = []): Promise<T | undefined> {
   return (await all<T>(sql, args))[0];
+}
+
+/** Runs several statements in one transaction (all or nothing). */
+export async function batch(statements: { sql: string; args?: InValue[] }[]): Promise<void> {
+  await (await client()).batch(statements.map((s) => ({ sql: s.sql, args: s.args ?? [] })), "write");
 }
 
 export async function run(sql: string, args: InValue[] = []): Promise<number> {

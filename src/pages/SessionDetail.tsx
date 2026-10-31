@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { ROUTES, waLink } from "../data/site";
-import { api, ApiError, fmtEuro, fmtLong, sessionImageSrc, type PublicSession } from "../lib/api";
+import { api, ApiError, fmtEuro, fmtLong, sessionImageSrc, type MembershipView, type PublicSession } from "../lib/api";
+import { useAuth } from "../lib/auth";
+import { CouponField, type AppliedCoupon } from "../components/CouponField";
+import { LoginBox } from "../components/LoginBox";
 import { Arrow } from "../components/Arrow";
 import { FadeUp } from "../components/Reveal";
 import { Button } from "../components/Magnetic";
@@ -25,22 +28,50 @@ function BookingForm({ s }: { s: PublicSession }) {
   const { t, lang } = useLang();
   const b = t.booking;
   const navigate = useNavigate();
+  const auth = useAuth();
+  const appt = s.bookingMode === "appointment";
   const maxSeats = Math.max(1, Math.min(s.maxPerBooking, s.spotsLeft));
-  const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", seats: 1, terms: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", preferred: "", seats: 1, terms: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [cards, setCards] = useState<MembershipView[]>([]);
+  const [cardId, setCardId] = useState("");
+  const [showLogin, setShowLogin] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const total = s.priceCents * form.seats;
+
+  // Logged in: prefill and look up memberships that can pay for this session.
+  useEffect(() => {
+    if (!auth.email) {
+      setCards([]);
+      setCardId("");
+      return;
+    }
+    setForm((f) => ({ ...f, email: f.email || auth.email, name: f.name || auth.name }));
+    auth
+      .authApi<{ memberships: MembershipView[] }>(`/api/account?sessionId=${encodeURIComponent(s.id)}`)
+      .then((d) => {
+        setCards(d.memberships);
+        if (d.memberships[0]) setCardId(d.memberships[0].id);
+      })
+      .catch(() => setCards([]));
+  }, [auth.email, auth.name, auth.authApi, s.id]);
+
+  const useCard = !!cardId && cards.some((c) => c.id === cardId);
+  const seats = useCard ? 1 : form.seats;
+  const gross = s.priceCents * seats;
+  const total = useCard ? 0 : coupon ? coupon.totalCents : gross;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || form.phone.trim().length < 6) return setError(b.errors.required);
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError(b.errors.email);
+    if (appt && form.preferred.trim().length < 3) return setError(b.errors.preferred);
     if (!form.terms) return setError(b.errors.terms);
     setError("");
     setBusy(true);
     try {
-      const res = await api<{ url?: string; ref?: string; token?: string }>("/api/checkout", {
+      const res = await auth.authApi<{ url?: string; ref?: string; token?: string }>("/api/checkout", {
         method: "POST",
         body: JSON.stringify({
           sessionId: s.id,
@@ -48,9 +79,12 @@ function BookingForm({ s }: { s: PublicSession }) {
           email: form.email,
           phone: form.phone,
           note: form.note,
-          seats: form.seats,
+          preferred: appt ? form.preferred : "",
+          seats,
           lang,
           acceptTerms: true,
+          couponCode: !useCard && coupon ? coupon.code : "",
+          membershipId: useCard ? cardId : "",
         }),
       });
       if (res.url) {
@@ -60,18 +94,27 @@ function BookingForm({ s }: { s: PublicSession }) {
       navigate(`${ROUTES.booking}/${res.ref}?t=${res.token}`);
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "";
+      if (code.startsWith("coupon_")) setCoupon(null);
       setError(
-        code === "full"
-          ? b.errors.full
-          : code === "unavailable"
-            ? b.errors.unavailable
-            : code === "payments_unavailable"
-              ? b.errors.payments
-              : code === "rate_limited"
-                ? b.errors.rate
-                : code === "invalid_input"
-                  ? b.errors.email
-                  : b.errors.generic,
+        code.startsWith("coupon_")
+          ? (b.couponErrors[code] ?? b.couponErrors.generic)
+          : code === "full"
+            ? b.errors.full
+            : code === "unavailable"
+              ? b.errors.unavailable
+              : code === "payments_unavailable"
+                ? b.errors.payments
+                : code === "rate_limited"
+                  ? b.errors.rate
+                  : code === "preferred_required"
+                    ? b.errors.preferred
+                    : code === "membership_not_usable" || code === "membership_one_seat"
+                      ? b.errors.membership
+                      : code === "login_required"
+                        ? b.errors.login
+                        : code === "invalid_input"
+                          ? b.errors.email
+                          : b.errors.generic,
       );
       setBusy(false);
     }
@@ -81,18 +124,76 @@ function BookingForm({ s }: { s: PublicSession }) {
     <form onSubmit={submit} noValidate className="rounded-[2rem] bg-linen p-6 shadow-[0_30px_80px_-40px_rgba(46,58,47,0.35)] sm:p-9">
       <h2 className="font-display text-3xl font-light text-ink">{b.formTitle}</h2>
       <div className="mt-7 grid gap-5">
+        {cards.length > 0 && s.priceCents > 0 && (
+          <fieldset className="rounded-2xl border border-forest/10 p-4">
+            <legend className="px-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{b.payWith}</legend>
+            <div className="grid gap-2">
+              {cards.map((c) => (
+                <label key={c.id} className="flex cursor-pointer items-start gap-3 rounded-xl bg-cream/60 px-4 py-3">
+                  <input type="radio" name="pay" checked={cardId === c.id} onChange={() => setCardId(c.id)} className="mt-1 accent-[var(--color-saffron)]" />
+                  <span>
+                    <span className="block font-semibold text-ink">{b.payMembership}</span>
+                    <span className="block text-sm text-forest/70">
+                      {c.name[lang]} · {b.membershipLeft(c.creditsLeft)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-cream/60 px-4 py-3">
+                <input type="radio" name="pay" checked={!useCard} onChange={() => setCardId("")} className="accent-[var(--color-saffron)]" />
+                <span className="font-semibold text-ink">{b.payOnline}</span>
+              </label>
+            </div>
+            {useCard && <p className="mt-3 text-xs text-forest/60">{b.membershipNote}</p>}
+          </fieldset>
+        )}
+        {auth.enabled && auth.ready && !auth.email && s.priceCents > 0 && (
+          <div className="rounded-2xl bg-sand/50 p-4 text-sm text-forest">
+            {showLogin ? (
+              <LoginBox compact />
+            ) : (
+              <p>
+                {b.membershipLogin}{" "}
+                <button type="button" onClick={() => setShowLogin(true)} className="font-semibold underline underline-offset-4 hover:text-saffron">
+                  {b.login}
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+
         <Field label={b.name}>
           <input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} autoComplete="name" required />
         </Field>
         <Field label={b.email}>
-          <input className={inputCls} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} autoComplete="email" required />
+          <input
+            className={inputCls}
+            type="email"
+            value={form.email}
+            onChange={(e) => set("email", e.target.value)}
+            autoComplete="email"
+            readOnly={useCard}
+            required
+          />
         </Field>
         <Field label={b.phone} hint={b.phoneHint}>
           <input className={inputCls} type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} autoComplete="tel" placeholder="+32" required />
         </Field>
-        {maxSeats > 1 && (
+        {appt && (
+          <Field label={b.preferred} hint={b.preferredHint}>
+            <input className={inputCls} value={form.preferred} onChange={(e) => set("preferred", e.target.value)} required />
+          </Field>
+        )}
+        {maxSeats > 1 && !useCard && (
           <Field label={b.seats}>
-            <select className={inputCls} value={form.seats} onChange={(e) => set("seats", Number(e.target.value))}>
+            <select
+              className={inputCls}
+              value={form.seats}
+              onChange={(e) => {
+                set("seats", Number(e.target.value));
+                setCoupon(null); // the discount depends on the amount: check the code again
+              }}
+            >
               {Array.from({ length: maxSeats }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -104,6 +205,10 @@ function BookingForm({ s }: { s: PublicSession }) {
         <Field label={b.note}>
           <textarea className={`${inputCls} min-h-[90px] resize-y`} value={form.note} onChange={(e) => set("note", e.target.value)} />
         </Field>
+
+        {!useCard && gross > 0 && (
+          <CouponField target={{ sessionId: s.id, seats, email: form.email.trim() || undefined }} applied={coupon} onChange={setCoupon} />
+        )}
 
         <div className="rounded-2xl bg-sand/60 p-5 text-sm text-forest/80">
           <p className="font-bold text-forest">{b.policyTitle}</p>
@@ -118,9 +223,19 @@ function BookingForm({ s }: { s: PublicSession }) {
           </label>
         </div>
 
-        <div className="flex items-baseline justify-between border-t border-forest/10 pt-5">
-          <span className="text-sm font-bold uppercase tracking-[0.16em] text-sage">{b.total}</span>
-          <span className="font-display text-3xl text-ink">{total > 0 ? fmtEuro(total, lang) : t.agenda.free}</span>
+        <div className="border-t border-forest/10 pt-5">
+          {coupon && !useCard && (
+            <div className="mb-2 flex items-baseline justify-between text-sm text-forest/70">
+              <span>{b.discount}</span>
+              <span>
+                <s className="mr-2 text-forest/40">{fmtEuro(gross, lang)}</s>−{fmtEuro(coupon.discountCents, lang)}
+              </span>
+            </div>
+          )}
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-bold uppercase tracking-[0.16em] text-sage">{b.total}</span>
+            <span className="font-display text-3xl text-ink">{useCard ? b.oneCredit : total > 0 ? fmtEuro(total, lang) : t.agenda.free}</span>
+          </div>
         </div>
 
         {error && (
@@ -134,7 +249,7 @@ function BookingForm({ s }: { s: PublicSession }) {
           disabled={busy}
           className="inline-flex w-full items-center justify-center gap-3 rounded-full bg-saffron px-7 py-4 text-[0.85rem] font-bold uppercase tracking-[0.16em] text-linen transition-colors duration-300 hover:bg-forest disabled:opacity-60"
         >
-          {busy ? b.sending : total > 0 ? b.pay : b.confirmFree}
+          {busy ? b.sending : useCard ? b.confirmMembership : total > 0 ? b.pay : b.confirmFree}
           {!busy && <Arrow className="h-4 w-4" />}
         </button>
         {total > 0 && <p className="text-center text-xs text-forest/55">{b.payNote}</p>}
@@ -160,6 +275,7 @@ export default function SessionDetail() {
   const past = s ? Date.parse(s.startsAt) <= Date.now() : false;
   const blocked = s && (s.status === "cancelled" ? a.cancelled : past ? a.past : s.spotsLeft <= 0 ? a.full : "");
   const desc = s?.description[lang] ?? "";
+  const appt = s?.bookingMode === "appointment";
 
   return (
     <section className="pb-28 pt-28 sm:pb-40 sm:pt-36">
@@ -179,7 +295,12 @@ export default function SessionDetail() {
             <div className="lg:col-span-7">
               <FadeUp>
                 <div className="relative aspect-[16/9] overflow-hidden rounded-[2rem]">
-                  {(() => { const im = sessionImageSrc(s); return <img src={im.src} srcSet={im.srcSet} sizes="(min-width:1024px) 55vw, 100vw" alt="" className="h-full w-full object-cover" />; })()}
+                  {(() => {
+                    const im = sessionImageSrc(s);
+                    return (
+                      <img src={im.src} srcSet={im.srcSet} sizes="(min-width:1024px) 55vw, 100vw" alt="" style={{ objectPosition: im.position }} className="h-full w-full object-cover" />
+                    );
+                  })()}
                 </div>
                 <span className="eyebrow mt-10">{t.categories[s.category] ?? t.categories.other}</span>
                 <h1 className="mt-5 font-display text-[clamp(2.4rem,5vw,4.4rem)] font-light leading-[1.05] text-ink">{s.title[lang]}</h1>
@@ -188,9 +309,9 @@ export default function SessionDetail() {
               <dl className="mt-10 grid gap-x-8 gap-y-6 border-y border-forest/10 py-8 sm:grid-cols-2">
                 <div>
                   <dt className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{t.booking.status.when}</dt>
-                  <dd className="mt-1 text-lg text-ink first-letter:uppercase">{fmtLong(s.startsAt, lang)}</dd>
+                  <dd className="mt-1 text-lg text-ink first-letter:uppercase">{appt ? a.appointment : fmtLong(s.startsAt, lang)}</dd>
                   <dd className="text-sm text-forest/60">
-                    {s.durationMin} {a.min} · {a.timezone}
+                    {s.durationMin} {a.min} · {appt ? a.appointmentHint : a.timezone}
                   </dd>
                 </div>
                 <div>
@@ -210,10 +331,12 @@ export default function SessionDetail() {
                     {s.priceCents > 0 ? `${fmtEuro(s.priceCents, lang)} ${a.perPerson}` : a.free}
                   </dd>
                 </div>
-                <div>
-                  <dt className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{t.booking.seats}</dt>
-                  <dd className={`mt-1 text-lg ${s.spotsLeft > 0 ? "text-saffron" : "text-forest/50"}`}>{s.spotsLeft > 0 ? a.spots(s.spotsLeft) : a.full}</dd>
-                </div>
+                {!appt && (
+                  <div>
+                    <dt className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{t.booking.seats}</dt>
+                    <dd className={`mt-1 text-lg ${s.spotsLeft > 0 ? "text-saffron" : "text-forest/50"}`}>{s.spotsLeft > 0 ? a.spots(s.spotsLeft) : a.full}</dd>
+                  </div>
+                )}
               </dl>
 
               {desc && <p className="lead mt-8 whitespace-pre-line">{desc}</p>}

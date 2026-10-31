@@ -1,5 +1,5 @@
 import { api, ApiError } from "../lib/api";
-import type { PublicSession } from "../lib/api";
+import type { MembershipPlan, MembershipView, PublicSession } from "../lib/api";
 
 const KEY = "ld-admin-passcode";
 export const getPass = () => sessionStorage.getItem(KEY) ?? "";
@@ -59,7 +59,32 @@ export type AdminBooking = {
   cancelledBy: string | null;
   holdUntil: string | null;
   paidOnline: boolean;
+  couponCode: string;
+  discountCents: number;
+  membershipId: string | null;
+  preferred: string;
 };
+
+export type AdminCoupon = {
+  id: string;
+  code: string;
+  description: string;
+  kind: "percent" | "fixed";
+  value: number;
+  appliesTo: "all" | "sessions" | "yoga" | "massage" | "online" | "memberships";
+  minAmountCents: number;
+  maxUses: number;
+  maxUsesPerEmail: number;
+  usedCount: number;
+  validFrom: string;
+  validUntil: string;
+  active: boolean;
+  discountGivenCents: number;
+  createdAt: string;
+};
+
+export type AdminPlan = MembershipPlan & { sold: number; revenueCents: number };
+export type AdminMembership = MembershipView;
 
 export const CATEGORY_LABELS: Record<string, string> = {
   yoga: "Kundalini Yoga",
@@ -90,3 +115,14 @@ export function policyPercent(startsAt: string) {
   const h = (Date.parse(startsAt) - Date.now()) / 3_600_000;
   return h >= 48 ? 100 : h >= 24 ? 50 : 0;
 }
+
+export const dateOnly = (iso: string) =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Brussels", day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
+
+/** Euro text ("25", "25,50", "25.5") -> cents, or NaN. */
+export const toCents = (v: string) => {
+  const n = Number(v.trim().replace(",", "."));
+  return v.trim() === "" || !Number.isFinite(n) || n < 0 ? NaN : Math.round(n * 100);
+};
+
+export const centsToText = (c: number) => (c / 100).toFixed(2).replace(/\.00$/, "");

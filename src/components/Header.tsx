@@ -69,6 +69,7 @@ export function Header() {
     { to: ROUTES.yoga, label: t.nav.yoga },
     { to: ROUTES.massage, label: t.nav.massage },
     { to: ROUTES.agenda, label: t.nav.agenda },
+    { to: ROUTES.memberships, label: t.nav.memberships },
     { to: ROUTES.travel, label: t.nav.travel },
     { to: ROUTES.gallery, label: t.nav.gallery },
     { to: ROUTES.contact, label: t.nav.contact },
@@ -128,6 +129,17 @@ export function Header() {
               <div className="hidden sm:block">
                 <LangToggle />
               </div>
+              <Link
+                to={ROUTES.account}
+                aria-label={t.nav.account}
+                title={t.nav.account}
+                className="grid h-11 w-11 place-items-center rounded-full border border-forest/20 text-forest transition-colors hover:border-saffron hover:text-saffron"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+                  <circle cx="12" cy="8.5" r="3.6" />
+                  <path d="M4.8 19.5c1.3-3.3 4-5 7.2-5s5.9 1.7 7.2 5" />
+                </svg>
+              </Link>
               <Magnetic>
                 <Link
                   to={ROUTES.agenda}

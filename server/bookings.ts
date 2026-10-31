@@ -4,6 +4,10 @@ import { sendBookingCancelled, sendBookingConfirmed } from "./email.js";
 import { HttpError, newId, newRef, newToken, safeEqual } from "./http.js";
 import { getSessionRow, getSessionWithTaken, TAKEN_SQL, toPublic, type SessionRow } from "./sessions.js";
 import { Stripe, stripe, stripeConfigured } from "./stripe.js";
+import type { AuthUser } from "./auth.js";
+import { evaluateCoupon, releaseCoupon, reserveCoupon } from "./coupons.js";
+import { applyMembershipCheckout, getMembership, returnCredit, usableFor, useCredit } from "./memberships.js";
+import { sectionOf } from "../shared/catalog.js";
 import { formatWhen, nowIso } from "./time.js";
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "expired";
@@ -30,6 +34,11 @@ export type BookingRow = {
   confirmed_at: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
+  coupon_code: string;
+  discount_cents: number;
+  membership_id: string | null;
+  user_id: string;
+  preferred: string;
 };
 
 /** Stripe Checkout must stay open at least 30 minutes; the place is held a little longer than that. */
@@ -75,39 +84,63 @@ export const checkoutInput = z.object({
   seats: z.number().int().min(1).max(50),
   lang: z.enum(["nl", "en"]).default("nl"),
   acceptTerms: z.literal(true),
+  couponCode: z.string().trim().max(40).default(""),
+  // Pay with a membership card (requires login). One session = one place.
+  membershipId: z.string().max(64).default(""),
+  // "By appointment" sessions: the customer's preferred day and time.
+  preferred: z.string().trim().max(300).default(""),
 });
+
+type NewBooking = Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">;
 
 /**
  * Reserves places in one atomic INSERT ... SELECT that only succeeds while enough
  * capacity is left, so the session can never be overbooked by concurrent requests.
  */
-async function insertIfCapacity(b: Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">) {
+async function insertIfCapacity(b: NewBooking) {
   const now = nowIso();
   return run(
-    `INSERT INTO bookings (id, ref, token, session_id, name, email, phone, note, seats, amount_cents, lang, source, status, hold_until, created_at, confirmed_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    `INSERT INTO bookings (id, ref, token, session_id, name, email, phone, note, seats, amount_cents, lang, source, status, hold_until, created_at, confirmed_at,
+       coupon_code, discount_cents, membership_id, user_id, preferred)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE (SELECT s.capacity - ${TAKEN_SQL} FROM sessions s WHERE s.id = ? AND s.status = 'published' AND s.starts_at > ?) >= ?`,
     [
       b.id, b.ref, b.token, b.session_id, b.name, b.email, b.phone, b.note, b.seats, b.amount_cents, b.lang, b.source,
-      b.status, b.hold_until, b.created_at, b.confirmed_at,
+      b.status, b.hold_until, b.created_at, b.confirmed_at, b.coupon_code, b.discount_cents, b.membership_id, b.user_id, b.preferred,
       now, b.session_id, now, b.seats,
     ],
   );
 }
 
-export async function createWebBooking(input: z.infer<typeof checkoutInput>, base: string) {
+export async function createWebBooking(input: z.infer<typeof checkoutInput>, base: string, user: AuthUser | null) {
   const s = await getSessionRow(input.sessionId);
   if (!s || s.status !== "published" || Date.parse(s.starts_at) <= Date.now()) {
     throw new HttpError(409, "unavailable");
   }
   if (input.seats > s.max_per_booking) throw new HttpError(400, "too_many_seats");
+  if (s.booking_mode === "appointment" && input.preferred.length < 3) throw new HttpError(400, "preferred_required");
 
-  const amount = s.price_cents * input.seats;
+  if (input.membershipId) return bookWithMembership(input, s, base, user);
+
+  const gross = s.price_cents * input.seats;
+  let amount = gross;
+  let discount = 0;
+  let couponCode = "";
+  if (input.couponCode && gross > 0) {
+    const r = await evaluateCoupon(input.couponCode, { kind: "session", section: sectionOf({ category: s.category, isOnline: !!s.is_online }) }, gross, input.email);
+    if (!(await reserveCoupon(r.coupon))) throw new HttpError(400, "coupon_used_up", "This code has been used up.");
+    discount = r.discountCents;
+    couponCode = r.coupon.code;
+    amount = gross - discount;
+  }
   const paid = amount > 0;
-  if (paid && !stripeConfigured()) throw new HttpError(503, "payments_unavailable");
+  if (paid && !stripeConfigured()) {
+    await releaseCoupon(couponCode);
+    throw new HttpError(503, "payments_unavailable");
+  }
 
   const now = nowIso();
-  const booking = {
+  const booking: NewBooking = {
     id: newId(),
     ref: newRef(),
     token: newToken(),
@@ -124,9 +157,17 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
     hold_until: paid ? new Date(Date.now() + HOLD_MS).toISOString() : null,
     created_at: now,
     confirmed_at: paid ? null : now,
+    coupon_code: couponCode,
+    discount_cents: discount,
+    membership_id: null,
+    user_id: user?.id ?? "",
+    preferred: input.preferred,
   };
 
-  if ((await insertIfCapacity(booking)) === 0) throw new HttpError(409, "full");
+  if ((await insertIfCapacity(booking)) === 0) {
+    await releaseCoupon(couponCode);
+    throw new HttpError(409, "full");
+  }
 
   if (!paid) {
     const row = (await getBooking(booking.id))!;
@@ -138,31 +179,74 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
     const url = await createCheckout(booking, s, base);
     return { url };
   } catch (err) {
-    await run(`UPDATE bookings SET status = 'expired', hold_until = NULL WHERE id = ? AND status = 'pending'`, [booking.id]);
+    await expireBooking(booking.id);
     console.error("[stripe] checkout failed", err);
     throw new HttpError(502, "payments_unavailable");
   }
 }
 
-async function createCheckout(
-  b: { id: string; ref: string; token: string; email: string; seats: number; lang: string },
-  s: SessionRow,
-  base: string,
-): Promise<string> {
+/** Books one place paid with a membership card: one credit off the card, nothing to pay. */
+async function bookWithMembership(input: z.infer<typeof checkoutInput>, s: SessionRow, base: string, user: AuthUser | null) {
+  if (!user) throw new HttpError(401, "login_required", "Please log in to use your membership.");
+  if (input.seats !== 1) throw new HttpError(400, "membership_one_seat", "A membership pays for one place per booking.");
+  const m = (await usableFor(user, s)).find((x) => x.id === input.membershipId);
+  if (!m) throw new HttpError(409, "membership_not_usable", "This membership can't be used for this session.");
+  if (!(await useCredit(m))) throw new HttpError(409, "membership_not_usable", "No sessions left on this membership.");
+
+  const now = nowIso();
+  const booking: NewBooking = {
+    id: newId(),
+    ref: newRef(),
+    token: newToken(),
+    session_id: s.id,
+    name: input.name,
+    email: user.email,
+    phone: input.phone,
+    note: input.note,
+    seats: 1,
+    amount_cents: 0,
+    lang: input.lang,
+    source: "web",
+    status: "confirmed",
+    hold_until: null,
+    created_at: now,
+    confirmed_at: now,
+    coupon_code: "",
+    discount_cents: 0,
+    membership_id: m.id,
+    user_id: user.id,
+    preferred: input.preferred,
+  };
+  if ((await insertIfCapacity(booking)) === 0) {
+    await returnCredit(m.id);
+    throw new HttpError(409, "full");
+  }
+  await sendBookingConfirmed((await getBooking(booking.id))!, s, base);
+  return { ref: booking.ref, token: booking.token };
+}
+
+async function createCheckout(b: NewBooking, s: SessionRow, base: string): Promise<string> {
   const title = b.lang === "en" && s.title_en ? s.title_en : s.title_nl;
   const where = s.is_online ? "Online" : s.venue;
-  const params: Stripe.Checkout.SessionCreateParams = {
-    mode: "payment",
-    line_items: [
-      {
-        quantity: b.seats,
+  const when = s.booking_mode === "appointment" ? (b.lang === "en" ? "By appointment" : "Op afspraak") : formatWhen(s.starts_at, b.lang);
+  const description = [when, where].filter(Boolean).join(" · ");
+  // With a discount the total is charged as one line, so Stripe shows exactly what was agreed.
+  const line: Stripe.Checkout.SessionCreateParams.LineItem = b.discount_cents
+    ? {
+        quantity: 1,
         price_data: {
           currency: "eur",
-          unit_amount: s.price_cents,
-          product_data: { name: title, description: [formatWhen(s.starts_at, b.lang), where].filter(Boolean).join(" · ") },
+          unit_amount: b.amount_cents,
+          product_data: {
+            name: b.seats > 1 ? `${title} (${b.seats}×)` : title,
+            description: `${description} · ${b.coupon_code} −${(b.discount_cents / 100).toFixed(2)} EUR`,
+          },
         },
-      },
-    ],
+      }
+    : { quantity: b.seats, price_data: { currency: "eur", unit_amount: s.price_cents, product_data: { name: title, description } } };
+  const params: Stripe.Checkout.SessionCreateParams = {
+    mode: "payment",
+    line_items: [line],
     customer_email: b.email,
     client_reference_id: b.id,
     metadata: { booking_id: b.id, ref: b.ref },
@@ -205,7 +289,9 @@ export async function confirmBooking(id: string, paymentIntent: string | null, b
 }
 
 export async function expireBooking(id: string) {
-  await run(`UPDATE bookings SET status = 'expired', hold_until = NULL WHERE id = ? AND status = 'pending'`, [id]);
+  const b = await getBooking(id);
+  const changed = await run(`UPDATE bookings SET status = 'expired', hold_until = NULL WHERE id = ? AND status = 'pending'`, [id]);
+  if (changed && b?.coupon_code) await releaseCoupon(b.coupon_code);
 }
 
 const intentId = (cs: Stripe.Checkout.Session) =>
@@ -213,6 +299,7 @@ const intentId = (cs: Stripe.Checkout.Session) =>
 
 /** Applies a Checkout Session's state to its booking (used by the webhook and as a fallback check). */
 export async function applyCheckoutSession(cs: Stripe.Checkout.Session, base: string) {
+  if (cs.metadata?.kind === "membership") return applyMembershipCheckout(cs, base);
   const id = cs.metadata?.booking_id || cs.client_reference_id;
   if (!id) return;
   if (cs.status === "complete" && (cs.payment_status === "paid" || cs.payment_status === "no_payment_required")) {
@@ -292,6 +379,8 @@ export async function cancelBooking(
     [nowIso(), opts.by, refund, b.id],
   );
   if (changed) {
+    // A session paid with a membership goes back on the card when it is cancelled in time (full-refund window).
+    if (b.membership_id && percent === 100 && (await getMembership(b.membership_id))) await returnCredit(b.membership_id);
     const updated = (await getBooking(b.id))!;
     await sendBookingCancelled(updated, s, refund, opts.by, !!opts.sessionCancelled, opts.base);
   }
@@ -357,6 +446,11 @@ export async function createManualBooking(input: z.infer<typeof manualInput>, ba
     hold_until: null,
     created_at: now,
     confirmed_at: now,
+    coupon_code: "",
+    discount_cents: 0,
+    membership_id: null,
+    user_id: "",
+    preferred: "",
   };
   if ((await insertIfCapacity(booking)) === 0) {
     throw new HttpError(409, "full", "Not enough places left (or the session is not published / already past). Increase the capacity first.");
@@ -381,6 +475,10 @@ export function customerView(b: BookingRow, s: SessionRow) {
     session,
     onlineLink: b.status === "confirmed" && s.is_online ? s.online_link : "",
     cancel: refundPreview(b, s),
+    couponCode: b.coupon_code,
+    discountCents: b.discount_cents,
+    paidWithMembership: !!b.membership_id,
+    preferred: b.preferred,
   };
 }
 
@@ -405,5 +503,9 @@ export function adminView(b: BookingRow) {
     cancelledBy: b.cancelled_by,
     holdUntil: b.hold_until,
     paidOnline: !!b.stripe_payment_intent,
+    couponCode: b.coupon_code,
+    discountCents: b.discount_cents,
+    membershipId: b.membership_id,
+    preferred: b.preferred,
   };
 }

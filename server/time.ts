@@ -54,3 +54,8 @@ export function formatEuro(cents: number, lang: string): string {
 }
 
 export const nowIso = () => new Date().toISOString();
+
+/** Today's date (YYYY-MM-DD) in Belgium. */
+export function todayBE(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
