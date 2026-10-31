@@ -3,7 +3,9 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { waLink } from "../data/site";
-import { useSessions } from "../lib/api";
+import { categoryGroup, useSessions, type CategoryGroup, type PublicSession } from "../lib/api";
+
+const GROUP_ORDER: readonly CategoryGroup[] = ["yoga", "massage", "retreat", "other"];
 import { FadeUp, RevealText } from "../components/Reveal";
 import { Button } from "../components/Magnetic";
 import { SessionCard } from "../components/sessions/SessionCard";
@@ -15,21 +17,31 @@ export default function Agenda() {
   usePageTitle(t.meta.agenda);
   const { sessions, error } = useSessions(200);
   const [params, setParams] = useSearchParams();
-  const cat = params.get("cat") ?? "";
+  // `cat` is a group (yoga / massage / ...). Older links may still pass a raw category, e.g. ?cat=healing.
+  const rawCat = params.get("cat") ?? "";
+  const cat = !rawCat || (GROUP_ORDER as readonly string[]).includes(rawCat) ? rawCat : categoryGroup(rawCat);
+  const onlineOnly = params.get("online") === "1";
 
-  const categories = useMemo(() => [...new Set((sessions ?? []).map((s) => s.category))], [sessions]);
-  const shown = (sessions ?? []).filter((s) => !cat || s.category === cat);
+  const isOnline = (s: PublicSession) => s.isOnline || s.category === "online";
+  const groups = useMemo(() => {
+    const present = new Set((sessions ?? []).map((s) => categoryGroup(s.category)));
+    return GROUP_ORDER.filter((g) => present.has(g));
+  }, [sessions]);
+  const hasOnline = (sessions ?? []).some(isOnline);
+  const shown = (sessions ?? []).filter((s) => (!cat || categoryGroup(s.category) === cat) && (!onlineOnly || isOnline(s)));
 
+  const update = (next: { cat?: string; online?: boolean }) => {
+    const c = next.cat ?? cat;
+    const o = next.online ?? onlineOnly;
+    setParams({ ...(c ? { cat: c } : {}), ...(o ? { online: "1" } : {}) }, { replace: true });
+  };
+
+  const chipClass = (on: boolean) =>
+    `rounded-full border px-4 py-2 text-sm transition-all duration-300 ${
+      on ? "border-saffron bg-saffron text-linen" : "border-forest/20 text-forest hover:border-saffron hover:text-saffron"
+    }`;
   const chip = (value: string, label: string) => (
-    <button
-      key={value || "all"}
-      type="button"
-      onClick={() => setParams(value ? { cat: value } : {}, { replace: true })}
-      aria-pressed={cat === value}
-      className={`rounded-full border px-4 py-2 text-sm transition-all duration-300 ${
-        cat === value ? "border-saffron bg-saffron text-linen" : "border-forest/20 text-forest hover:border-saffron hover:text-saffron"
-      }`}
-    >
+    <button key={value || "all"} type="button" onClick={() => update({ cat: value })} aria-pressed={cat === value} className={chipClass(cat === value)}>
       {label}
     </button>
   );
@@ -48,10 +60,24 @@ export default function Agenda() {
           {a.intro}
         </motion.p>
 
-        {categories.length > 1 && (
-          <div className="mt-12 flex flex-wrap gap-2">
+        {(groups.length > 1 || hasOnline || cat || onlineOnly) && (
+          <div className="mt-12 flex flex-wrap items-center gap-2">
             {chip("", a.all)}
-            {categories.map((c) => chip(c, t.categories[c] ?? t.categories.other))}
+            {groups.map((g) => chip(g, a.groups[g] ?? a.groups.other))}
+            {(hasOnline || onlineOnly) && (
+              <>
+                <span className="mx-1 h-6 w-px bg-forest/15" aria-hidden />
+                <button
+                  type="button"
+                  onClick={() => update({ online: !onlineOnly })}
+                  aria-pressed={onlineOnly}
+                  className={`${chipClass(onlineOnly)} inline-flex items-center gap-2`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${onlineOnly ? "bg-linen" : "bg-saffron"}`} aria-hidden />
+                  {a.onlineOnly}
+                </button>
+              </>
+            )}
           </div>
         )}
 

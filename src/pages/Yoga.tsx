@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useLang } from "../i18n/LanguageContext";
 import { Link } from "react-router-dom";
-import { IMG, ROUTES, YOUTUBE } from "../data/site";
+import { IMG, ROUTES, YOUTUBE, sm, waLink } from "../data/site";
 import { Arrow } from "../components/Arrow";
 import { PageHero } from "../components/PageHero";
 import { FadeUp, RevealImage, RevealText } from "../components/Reveal";
@@ -10,6 +10,17 @@ import { Button } from "../components/Magnetic";
 import { Marquee } from "../components/Marquee";
 import { CtaStrip } from "../components/CtaStrip";
 import { usePageTitle } from "../components/usePageTitle";
+
+/** Linda's own photo that fits each offer best. */
+const OFFER_IMG: Record<string, string> = {
+  group: IMG.twist,
+  card: IMG.happy,
+  private: IMG.smile,
+  onlineEn: IMG.arms,
+};
+
+const OFFER_CTA =
+  "inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-forest px-5 py-3 text-[0.72rem] font-bold uppercase tracking-[0.14em] text-linen transition-colors duration-300 hover:bg-saffron";
 
 export default function Yoga() {
   const { t } = useLang();
@@ -68,33 +79,73 @@ export default function Yoga() {
 
       <section className="py-28 sm:py-40">
         <div className="container-x">
-          <div className="grid gap-16 lg:grid-cols-12">
-            <div className="lg:col-span-5">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div>
               <FadeUp>
                 <span className="eyebrow">{y.offerTitle}</span>
               </FadeUp>
-              <RevealImage src={IMG.selflove} alt="Meditatie" className="mt-8 aspect-[4/5] rounded-[1.5rem]" />
-            </div>
-            <div className="flex flex-col justify-center lg:col-span-6 lg:col-start-7">
-              {y.offers.map((o, i) => (
-                <FadeUp key={o.title} delay={i * 0.1}>
-                  <div className="group border-t border-forest/15 py-9 last:border-b">
-                    <div className="flex items-baseline justify-between gap-6">
-                      <h3 className="font-display text-[clamp(1.9rem,3vw,2.8rem)] font-light text-ink transition-all duration-500 group-hover:italic group-hover:text-saffron">
-                        {o.title}
-                      </h3>
-                      <span className="text-sm text-sage">0{i + 1}</span>
-                    </div>
-                    <p className="mt-3 max-w-md text-forest/70">{o.text}</p>
-                  </div>
-                </FadeUp>
-              ))}
-              <FadeUp>
-                <Link to={`${ROUTES.agenda}?cat=yoga`} className="mt-8 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-saffron hover:text-forest">
-                  {y.offerNote} <Arrow className="h-4 w-4" />
-                </Link>
+              <FadeUp delay={0.1}>
+                <p className="lead mt-6 max-w-xl">{y.offerIntro}</p>
               </FadeUp>
             </div>
+            <FadeUp delay={0.15}>
+              <Link to={`${ROUTES.agenda}?cat=yoga`} className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-saffron hover:text-forest">
+                {y.offerNote} <Arrow className="h-4 w-4" />
+              </Link>
+            </FadeUp>
+          </div>
+
+          <div className="mt-14 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+            {y.offers.map((o, i) => {
+              const cta =
+                o.action === "ask" ? (
+                  <a href={waLink(y.askText)} target="_blank" rel="noreferrer" className={OFFER_CTA}>
+                    {y.askCta} <Arrow className="h-3.5 w-3.5" />
+                  </a>
+                ) : (
+                  <Link to={`${ROUTES.agenda}?cat=yoga${o.action === "bookOnline" ? "&online=1" : ""}`} className={OFFER_CTA}>
+                    {y.bookCta} <Arrow className="h-3.5 w-3.5" />
+                  </Link>
+                );
+              return (
+                <FadeUp key={o.key} delay={(i % 4) * 0.1} className="h-full">
+                  <article className="group flex h-full flex-col overflow-hidden rounded-[1.6rem] border border-forest/10 bg-linen">
+                    <div className="relative aspect-[4/3] overflow-hidden">
+                      <img
+                        src={sm(OFFER_IMG[o.key] ?? IMG.twist)}
+                        alt={o.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-[1.2s] group-hover:scale-105"
+                        style={{ objectPosition: o.key === "private" ? "50% 20%" : "50% 35%" }}
+                      />
+                      {o.mode !== "live" && (
+                        <span className="absolute right-3 top-3 rounded-full bg-saffron px-3 py-1 text-[0.65rem] font-bold uppercase tracking-[0.18em] text-linen">
+                          {o.mode === "online" ? y.onlineTag : y.alsoOnlineTag}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-1 flex-col p-6">
+                      <p className="text-[0.7rem] font-bold uppercase tracking-[0.18em] text-sage">{o.sub}</p>
+                      <h3 className="mt-2 font-display text-[1.7rem] font-light leading-tight text-ink">{o.title}</h3>
+                      <div className="mt-4 flex items-baseline gap-3">
+                        <span className="font-display text-3xl text-saffron">{o.price}</span>
+                        <span className="text-sm text-forest/60">{o.duration}</span>
+                      </div>
+                      <ul className="mt-4 space-y-1.5 text-sm font-semibold text-forest">
+                        {o.schedule.map((line) => (
+                          <li key={line} className="flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-saffron" aria-hidden />
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-4 text-sm leading-relaxed text-forest/70">{o.text}</p>
+                      <div className="mt-auto pt-6">{cta}</div>
+                    </div>
+                  </article>
+                </FadeUp>
+              );
+            })}
           </div>
         </div>
       </section>

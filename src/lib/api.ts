@@ -99,18 +99,54 @@ const CATEGORY_IMAGE: Record<string, string> = {
 /** Fallback photo per category, used when a session has no uploaded image. */
 export const categoryImage = (category: string) => CATEGORY_IMAGE[category] ?? IMG.portrait;
 
-/** The photo to show for a session: Linda's uploaded image if there is one, else a category default. */
-export function sessionImage(s: { category: string; imageUrl?: string }): string {
-  return s.imageUrl || categoryImage(s.category);
+/**
+ * The agenda groups sessions into two main offers: yoga and massage/healing.
+ * Online is not a group of its own: it's a property (`isOnline`) of a yoga or healing session.
+ * Legacy sessions saved with the old "online" category are shown under yoga.
+ */
+export type CategoryGroup = "yoga" | "massage" | "retreat" | "other";
+const GROUP_OF: Record<string, CategoryGroup> = {
+  yoga: "yoga",
+  gong: "yoga",
+  workshop: "yoga",
+  online: "yoga",
+  massage: "massage",
+  healing: "massage",
+  retreat: "retreat",
+};
+export const categoryGroup = (category: string): CategoryGroup => GROUP_OF[category] ?? "other";
+
+/** Title keywords -> the most fitting of Linda's own photos. */
+const TITLE_IMAGE: [RegExp, string][] = [
+  [/lomi/i, IMG.lomi1],
+  [/m\.?e\.?r\b|myo|fascia/i, IMG.lomi3],
+  [/chi nei|tao|buik|belly|orgaan|organ/i, IMG.lomi2],
+  [/sat ?nam|rasayan/i, IMG.selflove],
+  [/priv|coach/i, IMG.smile],
+];
+
+/** Default photo for a session without an upload: matched on the title first, then the category. */
+export function fallbackImage(s: { category: string; title?: { nl: string; en: string }; isOnline?: boolean }): string {
+  const text = s.title ? `${s.title.nl} ${s.title.en}` : "";
+  for (const [re, img] of TITLE_IMAGE) if (re.test(text)) return img;
+  if (s.isOnline && categoryGroup(s.category) === "yoga") return IMG.arms;
+  return categoryImage(s.category);
+}
+
+type ImgInput = { category: string; imageUrl?: string; title?: { nl: string; en: string }; isOnline?: boolean };
+
+/** The photo to show for a session: Linda's uploaded image if there is one, else a fitting default. */
+export function sessionImage(s: ImgInput): string {
+  return s.imageUrl || fallbackImage(s);
 }
 
 /**
  * src + srcSet for a session cover image. Uploaded images are a single file (no -sm
- * variant); the bundled category fallbacks have a small variant for lazy lists.
+ * variant); the bundled fallbacks have a small variant for lazy lists.
  */
-export function sessionImageSrc(s: { category: string; imageUrl?: string }): { src: string; srcSet?: string } {
+export function sessionImageSrc(s: ImgInput): { src: string; srcSet?: string } {
   if (s.imageUrl) return { src: s.imageUrl };
-  const full = categoryImage(s.category);
+  const full = fallbackImage(s);
   return { src: full, srcSet: `${sm(full)} 720w, ${full} 1600w` };
 }
 
