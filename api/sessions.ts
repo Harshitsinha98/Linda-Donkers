@@ -3,6 +3,7 @@ import {
   CATEGORIES,
   getSessionImage,
   getSessionWithTaken,
+  getAvailableAppointmentSlots,
   listUpcomingPublic,
   toPublic,
 } from "../server/sessions.js";
@@ -30,6 +31,13 @@ export const GET = handler(async (req) => {
         "Content-Length": String(body.length),
       },
     });
+  }
+
+  const availabilityFor = q.get("availabilityFor");
+  if (availabilityFor) {
+    const day = q.get("date") ?? "";
+    if (!day) throw new HttpError(400, "missing_date");
+    return json({ ok: true, slots: await getAvailableAppointmentSlots(availabilityFor, day) });
   }
 
   const id = q.get("id");
