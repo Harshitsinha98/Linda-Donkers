@@ -387,16 +387,16 @@ function SyncDialog({ onClose, onDone }: { onClose: () => void; onDone: () => vo
                 <p className="text-xs text-forest/65">Conflicts</p>
               </div>
             </div>
-            {draftCount > 0 && !applied && (
+            {draftCount > 0 && (
               <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-                {draftCount} online session(s) will be created as drafts. Add their private Zoom / Meet link in Edit, then publish them.
+                {applied ? draftCount + " online session(s) were created as drafts." : draftCount + " online session(s) will be created as drafts."} Add their private Zoom / Meet link in Edit, then publish them.
               </p>
             )}
             {visible.length > 0 && (
               <div>
                 <p className="mb-2 text-sm font-semibold">Sessions to add</p>
                 <ul className="max-h-52 space-y-2 overflow-y-auto text-sm">
-                  {visible.map((x, i) => (
+                  {visible.map((x) => (
                     <li key={x.offering + x.date} className="flex flex-wrap items-start justify-between gap-2 border-b border-forest/10 pb-2">
                       <span>{x.title}</span>
                       <span className="text-right text-forest/65">
