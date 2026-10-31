@@ -129,13 +129,8 @@ async function insertIfCapacity(b: NewBooking) {
                    COALESCE(x.offering, '') <> ''
                    AND COALESCE(x.offering, '') = (SELECT COALESCE(target.offering, '') FROM sessions target WHERE target.id = ?)
                  )
-                 OR (
-                   COALESCE(x.offering, '') = ''
-                   AND (
-                     lower(trim(x.title_nl)) = (SELECT lower(trim(target.title_nl)) FROM sessions target WHERE target.id = ?)
-                     OR lower(trim(x.title_en)) = (SELECT lower(trim(target.title_en)) FROM sessions target WHERE target.id = ?)
-                   )
-                 )
+                 OR lower(trim(x.title_nl)) = (SELECT lower(trim(target.title_nl)) FROM sessions target WHERE target.id = ?)
+                 OR lower(trim(x.title_en)) = (SELECT lower(trim(target.title_en)) FROM sessions target WHERE target.id = ?)
                )
            )
          )
