@@ -46,7 +46,7 @@ type Form = {
 
 const APPOINTMENT_TIME = "23:59";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels" }).format(new Date());
 
 function fromSession(s?: AdminSession): Form {
   if (!s) {
