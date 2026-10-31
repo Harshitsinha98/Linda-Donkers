@@ -195,6 +195,13 @@ export const sessionInput = z.object({
   }
   const sorted = [...rule.slotTimes].sort();
   const requiredGap = value.durationMin + rule.bufferMinutes;
+  for (const slot of sorted) {
+    const [hour, minute] = slot.split(":").map(Number);
+    if (hour * 60 + minute + requiredGap > 24 * 60) {
+      ctx.addIssue({ code: "custom", path: ["availability", "slotTimes"], message: "A slot plus its duration and buffer must finish before midnight." });
+      break;
+    }
+  }
   for (let i = 1; i < sorted.length; i++) {
     const [ah, am] = sorted[i - 1].split(":").map(Number);
     const [bh, bm] = sorted[i].split(":").map(Number);
@@ -589,8 +596,9 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
     all<{ appointment_start_at: string; appointment_end_at: string }>(
       "SELECT appointment_start_at, appointment_end_at FROM bookings " +
       "WHERE appointment_start_at IS NOT NULL AND appointment_end_at IS NOT NULL " +
+      "AND appointment_start_at < ? AND appointment_end_at > ? " +
       "AND (status = 'confirmed' OR (status = 'pending' AND hold_until > ?))",
-      [nowIso()],
+      [maxIso, minIso, nowIso()],
     ),
     all<{ starts_at: string; duration_min: number }>(
       "SELECT starts_at, duration_min FROM sessions " +
