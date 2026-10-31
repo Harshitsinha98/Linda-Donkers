@@ -46,10 +46,16 @@ const TREATMENT_OFFERINGS: Record<string, string[]> = {
 };
 
 function matchesTreatment(s: PublicSession, key: string): boolean {
-  if (key === "satnam") return s.offering === "satnam-live" || s.offering === "satnam-online" || (/sat.?nam|rasayan/i.test(s.title.nl + " " + s.title.en));
+  if (key === "satnam") {
+    return s.offering === "satnam-live" || s.offering === "satnam-online" ||
+      /sat.?nam|rasayan/i.test(s.title.nl + " " + s.title.en);
+  }
   if (s.offering === key) return true;
-  const title = (s.title.nl + " " + s.title.en).normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
-  if (key === "mer") return /m\\.?e\\.?r\\b|myo fascia|fascia energetic/i.test(title);
+  const title = (s.title.nl + " " + s.title.en)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (key === "mer") return /m\.?e\.?r\b|myo fascia|fascia energetic/i.test(title);
   if (key === "lomi") return /lomi lomi nui/i.test(title);
   if (key === "chinei") return /chi nei tsang|taoistic.*belly|taoistische.*buik/i.test(title);
   return false;
