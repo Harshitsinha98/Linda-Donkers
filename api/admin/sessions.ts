@@ -32,7 +32,7 @@ const postBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reset"), weeks: z.number().int().min(1).max(26).default(8), confirm: z.literal("RESET") }),
 ]);
 
-/** POST /api/admin/sessions { action: create | duplicate | cancel | publish | reset } */
+/** POST /api/admin/sessions: create | duplicate | cancel | publish | previewStandard | createMissingStandard | reset */
 export const POST = handler(async (req) => {
   requireAdmin(req);
   const body = await readBody(req, postBody);
