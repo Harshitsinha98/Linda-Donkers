@@ -14,6 +14,15 @@ function devApi(): Plugin {
         if (!req.url?.startsWith("/api/")) return next();
         try {
           const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
+
+          // Match the production Vercel rewrites for endpoints consolidated into shared functions.
+          if (url.pathname === "/api/session-image") {
+            url.pathname = "/api/sessions";
+            url.searchParams.set("asset", "image");
+          } else if (url.pathname === "/api/membership-checkout") {
+            url.pathname = "/api/memberships";
+          }
+
           const mod = await server.ssrLoadModule(`/api/${url.pathname.slice(5).replace(/\/$/, "")}.ts`);
           const fn = mod[req.method ?? "GET"];
           if (typeof fn !== "function") {
