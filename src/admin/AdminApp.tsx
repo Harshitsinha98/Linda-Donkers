@@ -354,7 +354,7 @@ function SyncDialog({ onClose, onDone }: { onClose: () => void; onDone: () => vo
           This checks Linda's standard offer against the sessions already in the database. It never deletes or edits existing sessions, bookings, prices or memberships. Conflicts are shown separately and left untouched.
         </p>
         <Label text="Plan weekly sessions for how many weeks?">
-          <input type="number" min={1} max={26} className={input + " max-w-[8rem]"} value={weeks} onChange={(e) => setWeeks(e.target.value)} />
+          <input type="number" min={1} max={26} className={input + " max-w-[8rem]"} value={weeks} onChange={(e) => { setWeeks(e.target.value); setReport(null); setApplied(false); }} />
         </Label>
         <div className="flex flex-wrap gap-3">
           <Btn disabled={busy || !(Number(weeks) >= 1 && Number(weeks) <= 26)} onClick={preview}>
