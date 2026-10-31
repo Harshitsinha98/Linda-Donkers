@@ -65,7 +65,8 @@ export default function BookingStatus() {
   };
 
   const s = b?.session;
-  const when = s ? fmtLong(s.startsAt, lang) : "";
+  const appt = s?.bookingMode === "appointment";
+  const when = s ? (appt ? st.appointment : fmtLong(s.startsAt, lang)) : "";
   const where = s ? (s.isOnline ? t.agenda.online : [s.venue, s.address].filter(Boolean).join(", ")) : "";
 
   return (
@@ -109,11 +110,26 @@ export default function BookingStatus() {
               <p className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{st.details}</p>
               <h2 className="mt-3 font-display text-3xl font-light text-ink">{s.title[lang]}</h2>
               <dl className="mt-6 grid gap-4 text-[0.98rem] sm:grid-cols-2">
-                <Item label={st.when} value={<span className="inline-block first-letter:uppercase">{when}</span>} />
+                <Item
+                  label={st.when}
+                  value={
+                    <>
+                      <span className="inline-block first-letter:uppercase">{when}</span>
+                      {appt && b.preferred && (
+                        <span className="block text-sm text-forest/70">
+                          {st.preferred}: {b.preferred}
+                        </span>
+                      )}
+                      {appt && b.status === "confirmed" && <span className="block text-sm text-forest/70">{st.appointmentText}</span>}
+                    </>
+                  }
+                />
                 <Item label={st.where} value={where || "-"} />
                 <Item label={st.seats} value={String(b.seats)} />
                 <Item label={st.reference} value={<strong>{b.ref}</strong>} />
+                {b.discountCents > 0 && <Item label={t.booking.discount} value={`${b.couponCode} −${fmtEuro(b.discountCents, lang)}`} />}
                 {b.amountCents > 0 && <Item label={st.paid} value={fmtEuro(b.amountCents, lang)} />}
+                {b.paidWithMembership && <Item label={st.paid} value={st.paidWithMembership} />}
                 {b.refundedCents > 0 && <Item label={st.refunded} value={fmtEuro(b.refundedCents, lang)} />}
                 {b.onlineLink && (
                   <Item
@@ -146,7 +162,13 @@ export default function BookingStatus() {
                 {b.cancel.allowed && (
                   <div className="mt-8 rounded-[2rem] border border-forest/10 p-7 sm:p-9">
                     <h2 className="font-display text-2xl text-ink">{st.cancelTitle}</h2>
-                    <p className="mt-3 text-forest/75">{st.cancelInfo(b.cancel.percent, fmtEuro(b.cancel.cents, lang))}</p>
+                    <p className="mt-3 text-forest/75">
+                      {b.paidWithMembership
+                        ? b.cancel.percent === 100
+                          ? st.cancelMembership
+                          : st.cancelMembershipLate
+                        : st.cancelInfo(b.cancel.percent, fmtEuro(b.cancel.cents, lang))}
+                    </p>
                     {error && <p className="mt-4 text-sm text-[#a2470b]">{error}</p>}
                     {!confirming ? (
                       <button type="button" onClick={() => setConfirming(true)} className="mt-6 text-sm font-semibold text-forest underline underline-offset-4 hover:text-saffron">

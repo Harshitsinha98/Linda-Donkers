@@ -32,6 +32,8 @@ export const ROUTES = {
   contact: "/contact",
   privacy: "/privacy",
   terms: "/voorwaarden",
+  memberships: "/lidmaatschap",
+  account: "/account",
 } as const;
 
 /** Only Linda's own photos. AI-generated images from the old site are intentionally excluded. */

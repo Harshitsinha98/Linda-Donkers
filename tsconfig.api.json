@@ -12,5 +12,5 @@
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["api", "server"]
+  "include": ["api", "server", "shared"]
 }

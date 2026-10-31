@@ -2,7 +2,10 @@ import { useRef, useState } from "react";
 import { ApiError } from "../lib/api";
 import { adminApi, CATEGORY_LABELS, type AdminSession } from "./adminApi";
 import { fileToDataUrl } from "./image";
-import { nextWeekday, TEMPLATES } from "./templates";
+import { inOneYear, nextWeekday, OFFERING_LABELS, TEMPLATES } from "./templates";
+import { PHOTO_KEYS } from "../../shared/catalog";
+import { photoFocus, photoSrc } from "../lib/api";
+import { sm } from "../data/site";
 import { Btn, ErrorNote, input, Label, Modal } from "./ui";
 
 /** Category picker groups. "online" is no longer a type: online is a checkbox on a yoga or healing session. */
@@ -30,7 +33,12 @@ type Form = {
   maxPerBooking: string;
   status: "published" | "draft";
   repeatWeeks: string;
+  offering: string;
+  imageKey: string;
+  bookingMode: "scheduled" | "appointment";
 };
+
+const APPOINTMENT_TIME = "23:59";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -40,6 +48,7 @@ function fromSession(s?: AdminSession): Form {
       titleNl: "", titleEn: "", descriptionNl: "", descriptionEn: "", category: "yoga",
       venue: "", address: "", isOnline: false, onlineLink: "", date: today(), startTime: "19:00",
       durationMin: "90", capacity: "10", price: "", maxPerBooking: "4", status: "published", repeatWeeks: "0",
+      offering: "", imageKey: "", bookingMode: "scheduled",
     };
   }
   return {
@@ -49,6 +58,7 @@ function fromSession(s?: AdminSession): Form {
     date: s.date, startTime: s.startTime, durationMin: String(s.durationMin), capacity: String(s.capacity),
     price: s.priceCents ? (s.priceCents / 100).toFixed(2).replace(/\.00$/, "") : "0",
     maxPerBooking: String(s.maxPerBooking), status: s.status === "draft" ? "draft" : "published", repeatWeeks: "0",
+    offering: s.offering ?? "", imageKey: s.imageKey ?? "", bookingMode: s.bookingMode === "appointment" ? "appointment" : "scheduled",
   };
 }
 
@@ -76,7 +86,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
         ...x,
         ...tpl.fields,
         startTime,
-        date: tpl.weekday !== undefined ? nextWeekday(tpl.weekday, startTime) : x.date,
+        date: tpl.weekday !== undefined ? nextWeekday(tpl.weekday, startTime) : tpl.fields.bookingMode === "appointment" ? inOneYear() : x.date,
         venue: tpl.fields.isOnline ? "" : x.venue,
         address: tpl.fields.isOnline ? "" : x.address,
         // Weekly classes are usually planned as a series (12 weeks); massages and healings are one-off.
@@ -120,16 +130,18 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
     if (!(capacity >= 1)) return setError("Capacity must be at least 1.");
     if (!(durationMin >= 5)) return setError("Duration must be at least 5 minutes.");
     if (!(maxPerBooking >= 1)) return setError("Max people per booking must be at least 1.");
-    if (!editing && Date.parse(`${f.date}T${f.startTime}`) < Date.now() - 60_000) {
-      return setError("This date and time is in the past.");
+    const appt = f.bookingMode === "appointment";
+    const startTime = appt ? APPOINTMENT_TIME : f.startTime;
+    if (!editing && Date.parse(`${f.date}T${startTime}`) < Date.now() - 60_000) {
+      return setError(appt ? "The 'bookable until' date is in the past." : "This date and time is in the past.");
     }
 
     const payload = {
       titleNl: f.titleNl, titleEn: f.titleEn, descriptionNl: f.descriptionNl, descriptionEn: f.descriptionEn,
       category: f.category, venue: f.isOnline ? "" : f.venue, address: f.isOnline ? "" : f.address,
-      isOnline: f.isOnline, onlineLink: f.isOnline ? f.onlineLink : "", date: f.date, startTime: f.startTime,
+      isOnline: f.isOnline, onlineLink: f.isOnline ? f.onlineLink : "", date: f.date, startTime,
       durationMin, capacity, priceCents, maxPerBooking: Math.min(maxPerBooking, capacity), status: f.status,
-      imageData, removeImage,
+      imageData, removeImage, imageKey: f.imageKey, offering: f.offering, bookingMode: f.bookingMode,
     };
     setBusy(true);
     setError("");
@@ -139,7 +151,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
       } else {
         await adminApi("/api/admin/sessions", {
           method: "POST",
-          body: JSON.stringify({ action: "create", session: payload, repeatWeeks: Number(f.repeatWeeks) || 0 }),
+          body: JSON.stringify({ action: "create", session: payload, repeatWeeks: appt ? 0 : Number(f.repeatWeeks) || 0 }),
         });
       }
       onSaved();
@@ -157,7 +169,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
             <Label text="Start from a template (optional)" hint="Fills in title, type, time, duration and price. You can still change everything.">
               <select className={input} value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
                 <option value="">Choose one of your regular sessions…</option>
-                {(["Kundalini Yoga", "Massage & healing"] as const).map((g) => (
+                {[...new Set(TEMPLATES.map((x) => x.group))].map((g) => (
                   <optgroup key={g} label={g}>
                     {TEMPLATES.filter((x) => x.group === g).map((x) => (
                       <option key={x.id} value={x.id}>
@@ -179,11 +191,15 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
 
         <div className="sm:col-span-2">
           <span className="text-xs font-bold uppercase tracking-[0.14em] text-forest/70">Photo</span>
-          <p className="mt-1 text-xs text-forest/50">A photo for this session, shown on the website. If you leave it empty, a default picture for the type is used.</p>
+          <p className="mt-1 text-xs text-forest/50">
+            Pick one of your photos below, or upload a new one (an upload is used instead of the chosen photo). The preview shows how the card crops it.
+          </p>
           <div className="mt-3 flex flex-wrap items-center gap-4">
-            <div className="grid h-24 w-36 shrink-0 place-items-center overflow-hidden rounded-xl border border-forest/15 bg-cream">
+            <div className="grid aspect-[4/3] w-40 shrink-0 place-items-center overflow-hidden rounded-xl border border-forest/15 bg-cream">
               {preview ? (
                 <img src={preview} alt="Session preview" className="h-full w-full object-cover" />
+              ) : f.imageKey ? (
+                <img src={sm(photoSrc(f.imageKey))} alt="Session preview" style={{ objectPosition: photoFocus(f.imageKey) }} className="h-full w-full object-cover" />
               ) : (
                 <span className="px-2 text-center text-[0.7rem] text-forest/40">No photo (default is used)</span>
               )}
@@ -208,10 +224,24 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
                     if (fileRef.current) fileRef.current.value = "";
                   }}
                 >
-                  Remove
+                  Remove upload
                 </Btn>
               )}
             </div>
+          </div>
+          <div className="mt-3 grid grid-cols-6 gap-2 sm:grid-cols-8">
+            {PHOTO_KEYS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => set("imageKey", f.imageKey === k ? "" : k)}
+                aria-pressed={f.imageKey === k}
+                title={k}
+                className={`aspect-square overflow-hidden rounded-lg border-2 ${f.imageKey === k ? "border-saffron" : "border-transparent opacity-80 hover:opacity-100"}`}
+              >
+                <img src={sm(photoSrc(k))} alt={k} loading="lazy" style={{ objectPosition: photoFocus(k) }} className="h-full w-full object-cover" />
+              </button>
+            ))}
           </div>
         </div>
 
@@ -236,17 +266,37 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
           </select>
         </Label>
 
-        <Label text="Date">
+        <Label text="How is it booked?" className="sm:col-span-2">
+          <select className={input} value={f.bookingMode} onChange={(e) => set("bookingMode", e.target.value as Form["bookingMode"])}>
+            <option value="scheduled">Fixed date & time (classes)</option>
+            <option value="appointment">By appointment: the customer pays and gives a preferred moment, you confirm it (massages, healings)</option>
+          </select>
+        </Label>
+        <Label text={f.bookingMode === "appointment" ? "Bookable until" : "Date"} hint={f.bookingMode === "appointment" ? "After this day it disappears from the website." : undefined}>
           <input type="date" className={input} value={f.date} onChange={(e) => set("date", e.target.value)} />
         </Label>
         <div className="grid grid-cols-2 gap-4">
-          <Label text="Start time" hint="Belgian time">
-            <input type="time" className={input} value={f.startTime} onChange={(e) => set("startTime", e.target.value)} />
-          </Label>
+          {f.bookingMode === "scheduled" ? (
+            <Label text="Start time" hint="Belgian time">
+              <input type="time" className={input} value={f.startTime} onChange={(e) => set("startTime", e.target.value)} />
+            </Label>
+          ) : (
+            <div />
+          )}
           <Label text="Duration (min)">
             <input type="number" min={5} inputMode="numeric" className={input} value={f.durationMin} onChange={(e) => set("durationMin", e.target.value)} />
           </Label>
         </div>
+        <Label text="Regular session" hint="Used by membership cards to know which sessions they can pay for." className="sm:col-span-2">
+          <select className={input} value={f.offering} onChange={(e) => set("offering", e.target.value)}>
+            <option value="">None (one-off session)</option>
+            {Object.entries(OFFERING_LABELS).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Label>
 
         <label className="flex items-center gap-3 text-sm font-semibold text-forest sm:col-span-2">
           <input type="checkbox" className="h-5 w-5 accent-[var(--color-saffron)]" checked={f.isOnline} onChange={(e) => set("isOnline", e.target.checked)} />
@@ -286,7 +336,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
           <textarea className={`${input} min-h-[110px]`} value={f.descriptionEn} onChange={(e) => set("descriptionEn", e.target.value)} />
         </Label>
 
-        {!editing && (
+        {!editing && f.bookingMode === "scheduled" && (
           <Label text="Repeat every week" hint="0 = only this date. 3 = this date plus the next 3 weeks (4 sessions)." className="sm:col-span-2">
             <input type="number" min={0} max={52} inputMode="numeric" className={`${input} max-w-[8rem]`} value={f.repeatWeeks} onChange={(e) => set("repeatWeeks", e.target.value)} />
           </Label>

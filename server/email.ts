@@ -3,6 +3,7 @@
  * Email never blocks a booking: if Resend is not configured or fails, it is logged and skipped.
  */
 import type { BookingRow } from "./bookings.js";
+import type { MembershipRow, PlanRow } from "./memberships.js";
 import type { SessionRow } from "./sessions.js";
 import { formatEuro, formatWhen } from "./time.js";
 
@@ -93,6 +94,20 @@ const copy = {
     noRefund: "Volgens de annuleringsvoorwaarden is er geen terugbetaling.",
     min: "min",
     timezone: "Belgische tijd",
+    appointment: "Op afspraak",
+    preferred: "Je voorkeur",
+    appointmentNote: "Linda neemt contact met je op om het moment te bevestigen.",
+    discount: "Korting",
+    paidWithCard: "Betaald met je kaart",
+    cardSubject: (t: string) => `Je lidmaatschap is actief: ${t}`,
+    cardIntro: "Dankjewel! Je lidmaatschap is actief. Hieronder vind je alle details.",
+    card: "Lidmaatschap",
+    sessions: "Sessies",
+    unlimited: "Onbeperkt",
+    validUntil: "Geldig tot",
+    howTo:
+      "Zo gebruik je het: log in op de website met dit e-mailadres (Google/Gmail of een inloglink per mail), kies een sessie in de agenda en kies bij het boeken voor \"Betaal met mijn lidmaatschap\".",
+    account: "Naar mijn account",
   },
   en: {
     confirmedSubject: (t: string) => `Your booking is confirmed: ${t}`,
@@ -120,6 +135,20 @@ const copy = {
     noRefund: "According to the cancellation policy there is no refund.",
     min: "min",
     timezone: "Belgian time",
+    appointment: "By appointment",
+    preferred: "Your preference",
+    appointmentNote: "Linda will contact you to confirm the moment.",
+    discount: "Discount",
+    paidWithCard: "Paid with your membership",
+    cardSubject: (t: string) => `Your membership is active: ${t}`,
+    cardIntro: "Thank you! Your membership is active. You'll find all the details below.",
+    card: "Membership",
+    sessions: "Sessions",
+    unlimited: "Unlimited",
+    validUntil: "Valid until",
+    howTo:
+      "How to use it: log in on the website with this email address (Google/Gmail or an email login link), pick a session in the agenda and choose \"Pay with my membership\" when booking.",
+    account: "Go to my account",
   },
 };
 
@@ -167,14 +196,19 @@ export async function sendBookingConfirmed(
 ) {
   const c = L(b.lang);
   const title = titleOf(s, b.lang);
+  const appt = s.booking_mode === "appointment";
   const details: [string, string][] = [
     [c.session, esc(title)],
-    [c.when, `${esc(formatWhen(s.starts_at, b.lang))} <span style="color:#8e9f84">(${c.timezone})</span>`],
+    appt
+      ? [c.when, `${esc(c.appointment)}${b.preferred ? `<br><span style="color:#8e9f84">${esc(c.preferred)}: ${esc(b.preferred)}</span>` : ""}<br><span style="color:#8e9f84">${esc(c.appointmentNote)}</span>`]
+      : [c.when, `${esc(formatWhen(s.starts_at, b.lang))} <span style="color:#8e9f84">(${c.timezone})</span>`],
     [c.duration, `${s.duration_min} ${c.min}`],
     [c.where, esc(place(s))],
     [c.seats, String(b.seats)],
   ];
+  if (b.discount_cents > 0) details.push([c.discount, `${esc(b.coupon_code)} −${esc(formatEuro(b.discount_cents, b.lang))}`]);
   if (b.amount_cents > 0) details.push([c.paid, esc(formatEuro(b.amount_cents, b.lang))]);
+  if (b.membership_id) details.push([c.paid, esc(c.paidWithCard)]);
   if (s.is_online) {
     details.push([c.link, s.online_link ? `<a href="${esc(s.online_link)}" style="color:#e8762b">${esc(s.online_link)}</a>` : esc(c.linkLater)]);
   }
@@ -192,14 +226,18 @@ ${button(waTo(WHATSAPP(), c.waText(b.ref)), c.whatsapp, "#25a244")}
 
   const adminDetails: [string, string][] = [
     ["Session", esc(s.title_nl)],
-    ["When", esc(formatWhen(s.starts_at, "en"))],
+    ["When", appt ? `By appointment · preferred: ${esc(b.preferred || "-")}` : esc(formatWhen(s.starts_at, "en"))],
     ["Name", esc(b.name)],
     ["Email", `<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>`],
     ["Phone", esc(b.phone || "-")],
     ["People", String(b.seats)],
-    ["Paid", b.source === "manual" ? "Added manually" : esc(formatEuro(b.amount_cents, "en"))],
+    [
+      "Paid",
+      b.source === "manual" ? "Added manually" : b.membership_id ? "With a membership (1 session used)" : esc(formatEuro(b.amount_cents, "en")),
+    ],
     ["Reference", esc(b.ref)],
   ];
+  if (b.discount_cents > 0) adminDetails.push(["Coupon", `${esc(b.coupon_code)} (−${esc(formatEuro(b.discount_cents, "en"))})`]);
   if (b.note) adminDetails.push(["Message", nl2br(b.note)]);
   const digits = phoneDigits(b.phone);
   const admin = layout(`
@@ -212,7 +250,9 @@ ${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`);
   const tasks: Promise<boolean>[] = [];
   if (b.email) tasks.push(send(b.email, c.confirmedSubject(title), customer, ADMIN_EMAIL()));
   if (notifyAdmin) {
-    tasks.push(send(ADMIN_EMAIL(), `New booking: ${b.name} · ${s.title_nl} · ${formatWhen(s.starts_at, "en")}`, admin, b.email || undefined));
+    tasks.push(
+      send(ADMIN_EMAIL(), `New booking: ${b.name} · ${s.title_nl} · ${appt ? "by appointment" : formatWhen(s.starts_at, "en")}`, admin, b.email || undefined),
+    );
   }
   await Promise.all(tasks);
 }
@@ -235,7 +275,7 @@ export async function sendBookingCancelled(
 <p style="font-size:15px;line-height:1.6;margin:0">${sessionCancelled ? c.sessionCancelledIntro : c.cancelledIntro}</p>
 ${rows([
   [c.session, esc(title)],
-  [c.when, esc(formatWhen(s.starts_at, b.lang))],
+  [c.when, esc(s.booking_mode === "appointment" ? c.appointment : formatWhen(s.starts_at, b.lang))],
   [c.ref, esc(b.ref)],
 ])}
 ${refundLine ? `<p style="font-size:15px;line-height:1.6">${refundLine}</p>` : ""}
@@ -261,4 +301,53 @@ ${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`);
     tasks.push(send(ADMIN_EMAIL(), `Cancelled: ${b.name} · ${s.title_nl}`, admin, b.email));
   }
   await Promise.all(tasks);
+}
+
+/* ---------------- memberships ---------------- */
+
+const dateOnly = (iso: string, lang: string) =>
+  new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "nl-BE", { timeZone: "Europe/Brussels", day: "numeric", month: "long", year: "numeric" }).format(
+    new Date(iso),
+  );
+
+export async function sendMembershipConfirmed(m: MembershipRow, plan: PlanRow | undefined, base: string) {
+  const c = L(m.lang);
+  const title = plan ? (m.lang === "en" && plan.name_en ? plan.name_en : plan.name_nl) : c.card;
+  const details: [string, string][] = [
+    [c.card, esc(title)],
+    [c.sessions, m.credits_total ? String(m.credits_total) : esc(c.unlimited)],
+    [c.validUntil, esc(m.expires_at ? dateOnly(m.expires_at, m.lang) : "-")],
+  ];
+  if (m.discount_cents > 0) details.push([c.discount, `${esc(m.coupon_code)} −${esc(formatEuro(m.discount_cents, m.lang))}`]);
+  if (m.amount_cents > 0) details.push([c.paid, esc(formatEuro(m.amount_cents, m.lang))]);
+  details.push([c.ref, `<strong>${esc(m.ref)}</strong>`]);
+
+  const customer = layout(`
+<p style="font-size:16px;margin:0 0 12px">${esc(c.hi(m.name))}</p>
+<p style="font-size:15px;line-height:1.6;margin:0">${c.cardIntro}</p>
+${rows(details)}
+<p style="font-size:15px;line-height:1.6;margin:0 0 14px">${esc(c.howTo)}</p>
+${button(`${base}/account`, c.account, "#2e3a2f")}
+${button(waTo(WHATSAPP(), c.waText(m.ref)), c.whatsapp, "#25a244")}
+<p style="margin:26px 0 0;font-size:15px;line-height:1.6">${c.bye}</p>`);
+
+  const admin = layout(`
+<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">New membership 🌿</p>
+${rows([
+  ["Membership", esc(plan?.name_nl ?? "-")],
+  ["Name", esc(m.name)],
+  ["Email", `<a href="mailto:${esc(m.email)}">${esc(m.email)}</a>`],
+  ["Phone", esc(m.phone || "-")],
+  ["Sessions", m.credits_total ? String(m.credits_total) : "Unlimited"],
+  ["Valid until", esc(m.expires_at ? dateOnly(m.expires_at, "en") : "-")],
+  ["Paid", m.source === "manual" ? `Added by you (${esc(formatEuro(m.amount_cents, "en"))})` : esc(formatEuro(m.amount_cents, "en"))],
+  ...(m.discount_cents > 0 ? ([["Coupon", `${esc(m.coupon_code)} (−${esc(formatEuro(m.discount_cents, "en"))})`]] as [string, string][]) : []),
+  ["Reference", esc(m.ref)],
+])}
+${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`);
+
+  await Promise.all([
+    send(m.email, c.cardSubject(title), customer, ADMIN_EMAIL()),
+    m.source === "manual" ? Promise.resolve(true) : send(ADMIN_EMAIL(), `New membership: ${m.name} · ${plan?.name_nl ?? ""}`, admin, m.email),
+  ]);
 }

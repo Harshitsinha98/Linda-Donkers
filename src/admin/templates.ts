@@ -1,13 +1,13 @@
 /**
- * Ready-made session templates for Linda's regular offer (prices from Oct 2026).
- * Choosing one in "New session" fills in the form; Linda only has to check the
- * date and, for weekly classes, set "Repeat every week".
- *
- * `weekday` (0 = Sunday … 6 = Saturday) moves the date to the next matching day.
+ * Ready-made session templates for Linda's regular offer, built from shared/catalog.ts.
+ * Choosing one in "New session" fills in the form; Linda only has to check the date
+ * (weekly classes) or the "bookable until" date (sessions by appointment).
  */
+import { OFFERINGS, type PhotoKey } from "../../shared/catalog";
+
 export type SessionTemplate = {
   id: string;
-  group: "Kundalini Yoga" | "Massage & healing";
+  group: string;
   label: string;
   weekday?: number;
   fields: {
@@ -22,135 +22,41 @@ export type SessionTemplate = {
     price: string;
     capacity: string;
     maxPerBooking: string;
+    offering: string;
+    imageKey: PhotoKey;
+    bookingMode: "scheduled" | "appointment";
   };
 };
 
-const GROUP_YOGA = {
-  descriptionNl: "Samen oefenen in een kleine, warme groep: kriya, ademwerk, mantra, meditatie en gongrelaxatie. Iedereen is welkom, ervaring is niet nodig.",
-  descriptionEn: "Practise together in a small, warm group: kriya, breathwork, mantra, meditation and gong relaxation. Everyone is welcome, no experience needed.",
-};
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const SECTION_LABEL = { yoga: "Yoga", massage: "Massage & healing", online: "Online" } as const;
+const euro = (cents: number) => String(cents / 100);
 
-export const TEMPLATES: SessionTemplate[] = [
-  {
-    id: "yoga-mon",
-    group: "Kundalini Yoga",
-    label: "Group class · Monday 19:30 · 90 min · €22",
-    weekday: 1,
-    fields: {
-      titleNl: "Kundalini Yoga groepsles", titleEn: "Kundalini Yoga group class", ...GROUP_YOGA,
-      category: "yoga", isOnline: false, startTime: "19:30", durationMin: "90", price: "22", capacity: "10", maxPerBooking: "4",
-    },
+export const TEMPLATES: SessionTemplate[] = OFFERINGS.map((o) => ({
+  id: o.key,
+  group: SECTION_LABEL[o.section],
+  label: `${o.titleEn} · ${o.weekly ? `${DAYS[o.weekly.weekday]} ${o.weekly.time}` : "by appointment"} · ${o.durationMin} min · €${euro(o.priceCents)}`,
+  weekday: o.weekly?.weekday,
+  fields: {
+    titleNl: o.titleNl,
+    titleEn: o.titleEn,
+    descriptionNl: o.descriptionNl,
+    descriptionEn: o.descriptionEn,
+    category: o.category,
+    isOnline: o.isOnline,
+    startTime: o.weekly?.time,
+    durationMin: String(o.durationMin),
+    price: euro(o.priceCents),
+    capacity: String(o.weekly ? o.capacity : 999),
+    maxPerBooking: String(o.maxPerBooking),
+    offering: o.key,
+    imageKey: o.photo,
+    bookingMode: o.weekly ? "scheduled" : "appointment",
   },
-  {
-    id: "yoga-wed",
-    group: "Kundalini Yoga",
-    label: "Group class · Wednesday 09:30 · 90 min · €22",
-    weekday: 3,
-    fields: {
-      titleNl: "Kundalini Yoga groepsles", titleEn: "Kundalini Yoga group class", ...GROUP_YOGA,
-      category: "yoga", isOnline: false, startTime: "09:30", durationMin: "90", price: "22", capacity: "10", maxPerBooking: "4",
-    },
-  },
-  {
-    id: "yoga-online-en",
-    group: "Kundalini Yoga",
-    label: "Online group class (English) · Friday 08:00 · 90 min · €15",
-    weekday: 5,
-    fields: {
-      titleNl: "Kundalini Yoga online groepsles (Engels)",
-      titleEn: "Kundalini Yoga online group class (English)",
-      descriptionNl: "Doe mee van thuis uit, waar je ook bent. Deze les wordt in het Engels gegeven. Je ontvangt de link in je bevestigingsmail.",
-      descriptionEn: "Join from home, wherever you are. This class is taught in English. You'll receive the link in your confirmation email.",
-      category: "yoga", isOnline: true, startTime: "08:00", durationMin: "90", price: "15", capacity: "20", maxPerBooking: "2",
-    },
-  },
-  {
-    id: "yoga-private",
-    group: "Kundalini Yoga",
-    label: "Private session + coaching · Saturday 09:30 · 90 min · €90",
-    weekday: 6,
-    fields: {
-      titleNl: "Kundalini Yoga privésessie met coaching",
-      titleEn: "Kundalini Yoga private session with coaching",
-      descriptionNl: "Een sessie helemaal op jouw maat, inclusief persoonlijke coaching.",
-      descriptionEn: "A session fully tailored to you, personal coaching included.",
-      category: "yoga", isOnline: false, startTime: "09:30", durationMin: "90", price: "90", capacity: "1", maxPerBooking: "1",
-    },
-  },
-  {
-    id: "yoga-private-online",
-    group: "Kundalini Yoga",
-    label: "Online one-to-one coaching · Saturday 11:30 · 90 min · €90",
-    weekday: 6,
-    fields: {
-      titleNl: "Online coaching één-op-één",
-      titleEn: "Online one-to-one coaching",
-      descriptionNl: "Een persoonlijke Kundalini Yoga sessie met coaching, online van thuis uit.",
-      descriptionEn: "A personal Kundalini Yoga session with coaching, online from home.",
-      category: "yoga", isOnline: true, startTime: "11:30", durationMin: "90", price: "90", capacity: "1", maxPerBooking: "1",
-    },
-  },
-  {
-    id: "mer",
-    group: "Massage & healing",
-    label: "M.E.R. Myo Fascia Energetic Release · 90 min · €140",
-    fields: {
-      titleNl: "M.E.R. Myo Fascia Energetic Release",
-      titleEn: "M.E.R. Myo Fascia Energetic Release",
-      descriptionNl: "Therapeutische massage: diep fasciawerk waarbij vastgehouden emoties met liefde en aanwezigheid worden aangeraakt. Ideaal bij chronische pijn en om je houding te verbeteren.",
-      descriptionEn: "Therapy massage: deep fascia work in which held emotions are touched with love and presence. Ideal for chronic pain and improving posture.",
-      category: "massage", isOnline: false, durationMin: "90", price: "140", capacity: "1", maxPerBooking: "1",
-    },
-  },
-  {
-    id: "lomi",
-    group: "Massage & healing",
-    label: "Lomi Lomi Nui · Hawaiian oil massage · 90 min · €140",
-    fields: {
-      titleNl: "Lomi Lomi Nui massage",
-      titleEn: "Lomi Lomi Nui massage",
-      descriptionNl: "Hawaiiaanse oliemassage: een hartopenende ceremonie met lange strijkbewegingen, als de golven van de zee.",
-      descriptionEn: "Hawaiian oil massage: a heart-opening ceremony with long strokes, like the waves of the sea.",
-      category: "massage", isOnline: false, durationMin: "90", price: "140", capacity: "1", maxPerBooking: "1",
-    },
-  },
-  {
-    id: "chinei",
-    group: "Massage & healing",
-    label: "Taoïstic belly & organ massage (Chi Nei Tsang) · 60 min · €90",
-    fields: {
-      titleNl: "Taoïstische buik- & orgaanmassage (Chi Nei Tsang)",
-      titleEn: "Taoïstic belly & organ massage (Chi Nei Tsang)",
-      descriptionNl: "Een helende massage gecombineerd met drukpunttherapie. Weldadig bij spijsverteringsproblemen en voor de bloedcirculatie.",
-      descriptionEn: "A healing massage combined with pressure point therapy. Beneficial for digestive problems and blood circulation.",
-      category: "massage", isOnline: false, durationMin: "60", price: "90", capacity: "1", maxPerBooking: "1",
-    },
-  },
-  {
-    id: "satnam-live",
-    group: "Massage & healing",
-    label: "Sat Nam Rasayan healing · live · 40 min · €44",
-    fields: {
-      titleNl: "Sat Nam Rasayan healing",
-      titleEn: "Sat Nam Rasayan healing",
-      descriptionNl: "Een healing vanuit een diepe meditatieve staat, voor diepe ontspanning van lichaam en geest.",
-      descriptionEn: "A healing given from a deep meditative state, for deep relaxation of body and mind.",
-      category: "healing", isOnline: false, durationMin: "40", price: "44", capacity: "1", maxPerBooking: "1",
-    },
-  },
-  {
-    id: "satnam-online",
-    group: "Massage & healing",
-    label: "Sat Nam Rasayan healing · online · 40 min · €44",
-    fields: {
-      titleNl: "Sat Nam Rasayan healing (online)",
-      titleEn: "Sat Nam Rasayan healing (online)",
-      descriptionNl: "Een healing op afstand vanuit een diepe meditatieve staat. Je ontvangt de link in je bevestigingsmail.",
-      descriptionEn: "A distance healing from a deep meditative state. You'll receive the link in your confirmation email.",
-      category: "healing", isOnline: true, durationMin: "40", price: "44", capacity: "1", maxPerBooking: "1",
-    },
-  },
-];
+}));
+
+/** Labels for the offering field (which regular session this is; memberships use it). */
+export const OFFERING_LABELS: Record<string, string> = Object.fromEntries(OFFERINGS.map((o) => [o.key, `${o.titleEn}${o.weekly ? ` (${DAYS[o.weekly.weekday]})` : ""}`]));
 
 /**
  * Next date (YYYY-MM-DD, local) that falls on `weekday`. Today counts, unless
@@ -162,6 +68,13 @@ export function nextWeekday(weekday: number, startTime = "00:00", from = new Dat
   const [h, m] = startTime.split(":").map(Number);
   const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 0, m || 0);
   if (start.getTime() <= from.getTime()) d.setDate(d.getDate() + 7);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Date one year from today (YYYY-MM-DD), the default "bookable until" for sessions by appointment. */
+export function inOneYear(from = new Date()): string {
+  const d = new Date(from.getFullYear() + 1, from.getMonth(), from.getDate());
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }

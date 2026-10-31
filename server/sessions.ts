@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { all, get, run } from "./db.js";
 import { HttpError, newId } from "./http.js";
-import { addDays, nowIso, zonedToUtc } from "./time.js";
+import { addDays, nowIso, todayBE, zonedToUtc } from "./time.js";
+import { OFFERINGS, PHOTO_KEYS, sectionOf } from "../shared/catalog.js";
 
 export const CATEGORIES = ["yoga", "gong", "workshop", "massage", "healing", "online", "retreat", "other"] as const;
 
@@ -24,6 +25,9 @@ export type SessionRow = {
   price_cents: number;
   max_per_booking: number;
   image: string;
+  image_key: string;
+  offering: string;
+  booking_mode: "scheduled" | "appointment";
   status: "draft" | "published" | "cancelled";
   created_at: string;
   updated_at: string;
@@ -58,6 +62,10 @@ export function toPublic(row: SessionRow & { taken?: number }) {
     // The image itself is served separately so list payloads stay small.
     hasImage: !!row.image,
     imageUrl: row.image ? `/api/session-image?id=${row.id}&v=${Date.parse(row.updated_at) || 0}` : "",
+    imageKey: row.image_key || "",
+    offering: row.offering || "",
+    bookingMode: row.booking_mode === "appointment" ? ("appointment" as const) : ("scheduled" as const),
+    section: sectionOf({ category: row.category, isOnline: !!row.is_online }),
     status: row.status,
   };
 }
@@ -111,6 +119,12 @@ export const sessionInput = z.object({
   // Optional cover photo as a data URL (data:image/...;base64,...). Empty string keeps the current image on update.
   imageData: z.string().max(3_500_000).default(""),
   removeImage: z.boolean().default(false),
+  // One of Linda's own photos (see shared/catalog.ts), used when no photo is uploaded.
+  imageKey: z.union([z.literal(""), z.enum(PHOTO_KEYS)]).default(""),
+  // Which regular offering this is (used for membership cards). Empty for one-off sessions.
+  offering: z.string().trim().max(40).default(""),
+  // "appointment": no fixed time; `date` is the last day it can be booked and the customer gives a preferred moment.
+  bookingMode: z.enum(["scheduled", "appointment"]).default("scheduled"),
 });
 export type SessionInput = z.infer<typeof sessionInput>;
 
@@ -167,6 +181,9 @@ function columns(input: SessionInput) {
     price_cents: input.priceCents,
     max_per_booking: Math.min(input.maxPerBooking, input.capacity),
     status: input.status,
+    image_key: input.imageKey,
+    offering: input.offering,
+    booking_mode: input.bookingMode,
   };
 }
 
@@ -249,6 +266,9 @@ export function rowToInput(row: SessionRow): SessionInput {
     status: row.status === "cancelled" ? "draft" : row.status,
     imageData: "",
     removeImage: false,
+    imageKey: (PHOTO_KEYS as readonly string[]).includes(row.image_key) ? (row.image_key as SessionInput["imageKey"]) : "",
+    offering: row.offering || "",
+    bookingMode: row.booking_mode === "appointment" ? "appointment" : "scheduled",
   };
 }
 
@@ -256,4 +276,91 @@ export function rowToInput(row: SessionRow): SessionInput {
 export async function getSessionImage(id: string): Promise<string> {
   const row = await get<{ image: string }>(`SELECT image FROM sessions WHERE id = ?`, [id]);
   return row?.image ?? "";
+}
+
+/* ---------------- reset to Linda's standard schedule ---------------- */
+
+
+/** First date on/after today (Belgian time) that falls on `weekday` and whose start time is still ahead. */
+function nextWeekdayDate(weekday: number, time: string): string {
+  let d = todayBE();
+  for (let i = 0; i < 8; i++) {
+    const [y, m, dd] = d.split("-").map(Number);
+    const wd = new Date(Date.UTC(y, m - 1, dd)).getUTCDay();
+    if (wd === weekday && zonedToUtc(d, time).getTime() > Date.now()) return d;
+    d = addDays(d, 1);
+  }
+  return d;
+}
+
+export const APPOINTMENT_TIME = "23:59";
+const IN_PERSON_VENUE = "Diamond Yoga · Deurne (Antwerpen)";
+
+/**
+ * Deletes every session that has no live booking (confirmed, or pending inside its payment window)
+ * and creates Linda's standard offer: weekly classes for `weeks` weeks, and the massages /
+ * healings as "by appointment" sessions that can be booked for a year.
+ * Sessions with live bookings are kept and reported, so nobody loses a paid place.
+ */
+export async function resetToStandard(weeks: number) {
+  const now = nowIso();
+  const rows = await all<{ id: string; title_nl: string; starts_at: string; offering: string; date: string; booking_mode: string; live: number }>(
+    `SELECT s.id, s.title_nl, s.starts_at, s.offering, s.date, s.booking_mode,
+       (SELECT COUNT(*) FROM bookings b WHERE b.session_id = s.id
+          AND (b.status = 'confirmed' OR (b.status = 'pending' AND b.hold_until > ?))) AS live
+     FROM sessions s`,
+    [now],
+  );
+  const kept = rows.filter((r) => r.live > 0);
+  const remove = rows.filter((r) => r.live === 0);
+  for (const r of remove) {
+    await run(`DELETE FROM bookings WHERE session_id = ?`, [r.id]);
+    await run(`DELETE FROM sessions WHERE id = ?`, [r.id]);
+  }
+
+  // Never create a second copy of a kept session (same offering, same date / same appointment offer).
+  const keptKeys = new Set(kept.map((k) => (k.booking_mode === "appointment" ? `${k.offering}|appt` : `${k.offering}|${k.date}`)));
+  let created = 0;
+  const until = addDays(todayBE(), 365);
+  for (const o of OFFERINGS) {
+    const base: SessionInput = {
+      titleNl: o.titleNl,
+      titleEn: o.titleEn,
+      descriptionNl: o.descriptionNl,
+      descriptionEn: o.descriptionEn,
+      category: o.category,
+      venue: o.isOnline ? "" : IN_PERSON_VENUE,
+      address: "",
+      isOnline: o.isOnline,
+      onlineLink: "",
+      date: until,
+      startTime: APPOINTMENT_TIME,
+      durationMin: o.durationMin,
+      capacity: o.capacity,
+      priceCents: o.priceCents,
+      maxPerBooking: o.maxPerBooking,
+      status: "published",
+      imageData: "",
+      removeImage: false,
+      imageKey: o.photo,
+      offering: o.key,
+      bookingMode: "appointment",
+    };
+    if (o.weekly) {
+      const first = nextWeekdayDate(o.weekly.weekday, o.weekly.time);
+      for (let w = 0; w < weeks; w++) {
+        const date = addDays(first, w * 7);
+        if (keptKeys.has(`${o.key}|${date}`)) continue;
+        created += (await createSessions({ ...base, date, startTime: o.weekly.time, bookingMode: "scheduled" }, 0)).length;
+      }
+    } else if (!keptKeys.has(`${o.key}|appt`)) {
+      // By appointment: many requests possible, one person per booking.
+      created += (await createSessions({ ...base, capacity: 999, maxPerBooking: 1 }, 0)).length;
+    }
+  }
+  return {
+    deleted: remove.length,
+    created,
+    kept: kept.map((k) => ({ id: k.id, title: k.title_nl, startsAt: k.starts_at, bookings: k.live })),
+  };
 }

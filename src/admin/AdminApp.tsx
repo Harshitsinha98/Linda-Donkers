@@ -7,7 +7,10 @@ import { usePageTitle } from "../components/usePageTitle";
 import { adminApi, CATEGORY_LABELS, downloadCsv, euro, getPass, setPass, when, type AdminBooking, type AdminSession } from "./adminApi";
 import { SessionForm } from "./SessionForm";
 import { BookingRowCard, SessionBookings } from "./BookingsPanel";
-import { Badge, Btn, ErrorNote, input } from "./ui";
+import { Badge, Btn, ErrorNote, input, Label, Modal } from "./ui";
+import { CouponsTab } from "./CouponsTab";
+import { MembershipsTab } from "./MembershipsTab";
+import { OFFERINGS } from "../../shared/catalog";
 
 function Login({ onOk }: { onOk: () => void }) {
   const [code, setCode] = useState("");
@@ -110,7 +113,9 @@ function SessionRow({
     <div className={`rounded-3xl border border-forest/10 bg-linen p-5 sm:p-6 ${s.status === "cancelled" ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-saffron">{when(s.startsAt)}</p>
+          <p className="text-sm font-semibold text-saffron">
+            {s.bookingMode === "appointment" ? `By appointment · bookable until ${when(s.startsAt).replace(/,? \d\d:\d\d$/, "")}` : when(s.startsAt)}
+          </p>
           <h3 className="mt-1 font-display text-2xl leading-snug text-ink">{s.title.nl}</h3>
           <p className="mt-1 text-sm text-forest/70">
             {CATEGORY_LABELS[s.category] ?? s.category} · {s.durationMin} min · {s.isOnline ? "Online" : s.venue || "No venue"} ·{" "}
@@ -128,7 +133,9 @@ function SessionRow({
       <div className="mt-4">
         <div className="flex justify-between text-sm text-forest">
           <span>
-            <strong>{s.confirmedSeats}</strong> / {s.capacity} booked{s.pendingSeats ? ` · ${s.pendingSeats} paying now` : ""}
+            <strong>{s.confirmedSeats}</strong>
+            {s.bookingMode === "appointment" ? " booked" : ` / ${s.capacity} booked`}
+            {s.pendingSeats ? ` · ${s.pendingSeats} paying now` : ""}
           </span>
           <span>{euro(s.revenueCents)} received</span>
         </div>
@@ -177,12 +184,96 @@ function SessionRow({
   );
 }
 
+function ResetDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [weeks, setWeeks] = useState("8");
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ deleted: number; created: number; plansCreated: number; kept: { title: string; startsAt: string; bookings: number }[] } | null>(null);
+
+  const go = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await adminApi<NonNullable<typeof result>>("/api/admin/sessions", {
+        method: "POST",
+        body: JSON.stringify({ action: "reset", weeks: Number(weeks) || 8, confirm: "RESET" }),
+      });
+      setResult(r);
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Modal title="Start fresh with your standard schedule" onClose={onClose}>
+      {result ? (
+        <div className="grid gap-4 text-forest">
+          <p>
+            <strong>{result.deleted}</strong> old session(s) deleted, <strong>{result.created}</strong> new session(s) created
+            {result.plansCreated ? `, ${result.plansCreated} membership card(s) added` : ""}.
+          </p>
+          {result.kept.length > 0 && (
+            <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Kept because people booked them (cancel them yourself if needed, they get a refund):</p>
+              <ul className="mt-2 list-disc pl-5">
+                {result.kept.map((k) => (
+                  <li key={k.title + k.startsAt}>
+                    {k.title} · {when(k.startsAt)} · {k.bookings} booking(s)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Btn onClick={onClose}>Close</Btn>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-4 text-forest">
+          <p>This deletes <strong>all sessions</strong> (upcoming and past) and creates your standard offer:</p>
+          <ul className="list-disc pl-5 text-sm">
+            {OFFERINGS.map((o) => (
+              <li key={o.key}>
+                {o.titleEn} · {o.weekly ? `every ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][o.weekly.weekday]} ${o.weekly.time}` : "by appointment"} ·{" "}
+                {o.durationMin} min · {euro(o.priceCents)}
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-forest/70">
+            Sessions that someone has booked (and paid) are never deleted; you'll see a list of them afterwards. Online sessions are created without a link: add your Zoom/Meet link with
+            Edit. Your membership cards are added too if you have none yet.
+          </p>
+          <Label text="Plan the weekly classes for how many weeks?">
+            <input type="number" min={1} max={26} className={`${input} max-w-[8rem]`} value={weeks} onChange={(e) => setWeeks(e.target.value)} />
+          </Label>
+          <Label text='Type "RESET" to confirm'>
+            <input className={`${input} max-w-[12rem]`} value={typed} onChange={(e) => setTyped(e.target.value)} />
+          </Label>
+          <ErrorNote text={error} />
+          <div className="flex justify-end gap-3">
+            <Btn kind="ghost" onClick={onClose}>
+              Cancel
+            </Btn>
+            <Btn kind="danger" disabled={busy || typed.trim().toUpperCase() !== "RESET"} onClick={go}>
+              {busy ? "Working…" : "Delete all & create standard schedule"}
+            </Btn>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function SessionsTab() {
   const [scope, setScope] = useState<"upcoming" | "past">("upcoming");
   const [list, setList] = useState<AdminSession[] | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<AdminSession | "new" | null>(null);
   const [viewing, setViewing] = useState<AdminSession | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(() => {
     adminApi<{ sessions: AdminSession[] }>(`/api/admin/sessions?scope=${scope}`)
@@ -216,7 +307,12 @@ function SessionsTab() {
             </button>
           ))}
         </div>
-        <Btn onClick={() => setEditing("new")}>+ New session</Btn>
+        <div className="flex flex-wrap gap-2">
+          <Btn kind="ghost" onClick={() => setResetting(true)}>
+            Reset to standard schedule
+          </Btn>
+          <Btn onClick={() => setEditing("new")}>+ New session</Btn>
+        </div>
       </div>
 
       {list && scope === "upcoming" && (
@@ -266,6 +362,7 @@ function SessionsTab() {
         />
       )}
       {viewing && <SessionBookings session={viewing} onClose={() => setViewing(null)} onChanged={load} />}
+      {resetting && <ResetDialog onClose={() => setResetting(false)} onDone={load} />}
     </>
   );
 }
@@ -319,7 +416,7 @@ function BookingsTab() {
 export default function AdminApp() {
   usePageTitle("Admin | Linda Donkers");
   const [authed, setAuthed] = useState(() => !!getPass());
-  const [tab, setTab] = useState<"sessions" | "bookings">("sessions");
+  const [tab, setTab] = useState<"sessions" | "bookings" | "coupons" | "memberships">("sessions");
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -360,7 +457,7 @@ export default function AdminApp() {
           </div>
         </div>
         <nav className="mx-auto flex max-w-5xl gap-1 px-4 sm:px-6" aria-label="Admin">
-          {(["sessions", "bookings"] as const).map((k) => (
+          {(["sessions", "bookings", "coupons", "memberships"] as const).map((k) => (
             <button
               key={k}
               type="button"
@@ -372,7 +469,9 @@ export default function AdminApp() {
           ))}
         </nav>
       </header>
-      <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">{tab === "sessions" ? <SessionsTab /> : <BookingsTab />}</main>
+      <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+        {tab === "sessions" ? <SessionsTab /> : tab === "bookings" ? <BookingsTab /> : tab === "coupons" ? <CouponsTab /> : <MembershipsTab />}
+      </main>
     </div>
   );
 }

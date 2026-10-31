@@ -31,11 +31,12 @@ export const GET = handler(async (req) => {
   );
 
   if (q.get("format") === "csv") {
-    const header = ["Reference", "Status", "Session", "When", "Name", "Email", "Phone", "People", "Amount (EUR)", "Refunded (EUR)", "Source", "Message", "Booked at"];
+    const header = ["Reference", "Status", "Session", "When", "Name", "Email", "Phone", "People", "Amount (EUR)", "Refunded (EUR)", "Source", "Message", "Booked at", "Coupon", "Discount (EUR)", "Paid with membership", "Preferred time"];
     const lines = rows.map((r) =>
       [
         r.ref, r.status, r.title_nl, formatWhen(r.starts_at, "en"), r.name, r.email, r.phone, r.seats,
         (r.amount_cents / 100).toFixed(2), (r.refunded_cents / 100).toFixed(2), r.source, r.note, r.created_at,
+        r.coupon_code, (r.discount_cents / 100).toFixed(2), r.membership_id ? "yes" : "", r.preferred,
       ].map(csvCell).join(","),
     );
     return new Response("\uFEFF" + [header.join(","), ...lines].join("\n"), {
