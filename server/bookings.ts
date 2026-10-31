@@ -2,7 +2,7 @@ import { z } from "zod";
 import { all, get, run } from "./db.js";
 import { sendBookingCancelled, sendBookingConfirmed } from "./email.js";
 import { HttpError, newId, newRef, newToken, safeEqual } from "./http.js";
-import { getSessionRow, getSessionWithTaken, TAKEN_SQL, toPublic, type SessionRow } from "./sessions.js";
+import { getSessionRow, getSessionWithTaken, parseAvailability, validateAppointmentSlot, TAKEN_SQL, toPublic, type SessionRow } from "./sessions.js";
 import { Stripe, stripe, stripeConfigured } from "./stripe.js";
 import type { AuthUser } from "./auth.js";
 import { evaluateCoupon, releaseCoupon, reserveCoupon } from "./coupons.js";
@@ -39,6 +39,8 @@ export type BookingRow = {
   membership_id: string | null;
   user_id: string;
   preferred: string;
+  appointment_start_at: string | null;
+  appointment_end_at: string | null;
 };
 
 /** Stripe Checkout must stay open at least 30 minutes; the place is held a little longer than that. */
@@ -56,8 +58,9 @@ export function refundPercent(startsAt: string, now = Date.now()): 0 | 50 | 100 
 }
 
 export function refundPreview(b: BookingRow, s: SessionRow) {
-  const allowed = b.status === "confirmed" && Date.parse(s.starts_at) > Date.now();
-  const percent = refundPercent(s.starts_at);
+  const appointmentStart = b.appointment_start_at ?? s.starts_at;
+  const allowed = b.status === "confirmed" && Date.parse(appointmentStart) > Date.now();
+  const percent = refundPercent(appointmentStart);
   const cents = b.stripe_payment_intent ? Math.max(0, Math.round((b.amount_cents * percent) / 100) - b.refunded_cents) : 0;
   return { allowed, percent, cents };
 }
@@ -89,6 +92,8 @@ export const checkoutInput = z.object({
   membershipId: z.string().max(64).default(""),
   // "By appointment" sessions: the customer's preferred day and time.
   preferred: z.string().trim().max(300).default(""),
+  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(""),
+  appointmentTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default(""),
 });
 
 type NewBooking = Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">;
@@ -101,13 +106,32 @@ async function insertIfCapacity(b: NewBooking) {
   const now = nowIso();
   return run(
     `INSERT INTO bookings (id, ref, token, session_id, name, email, phone, note, seats, amount_cents, lang, source, status, hold_until, created_at, confirmed_at,
-       coupon_code, discount_cents, membership_id, user_id, preferred)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-     WHERE (SELECT s.capacity - ${TAKEN_SQL} FROM sessions s WHERE s.id = ? AND s.status = 'published' AND s.starts_at > ?) >= ?`,
+       coupon_code, discount_cents, membership_id, user_id, preferred, appointment_start_at, appointment_end_at)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+     WHERE (SELECT s.capacity - ${TAKEN_SQL} FROM sessions s WHERE s.id = ? AND s.status = 'published' AND s.starts_at > ?) >= ?
+       AND (
+         ? IS NULL OR (
+           NOT EXISTS (
+             SELECT 1 FROM bookings x
+             WHERE x.appointment_start_at IS NOT NULL AND x.appointment_end_at IS NOT NULL
+               AND (x.status = 'confirmed' OR (x.status = 'pending' AND x.hold_until > ?))
+               AND x.appointment_start_at < ? AND x.appointment_end_at > ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM sessions x
+             WHERE x.id <> ? AND x.status = 'published' AND x.booking_mode = 'scheduled'
+               AND julianday(x.starts_at) < julianday(?)
+               AND julianday(x.starts_at) + (x.duration_min / 1440.0) > julianday(?)
+           )
+         )
+       )`,
     [
       b.id, b.ref, b.token, b.session_id, b.name, b.email, b.phone, b.note, b.seats, b.amount_cents, b.lang, b.source,
       b.status, b.hold_until, b.created_at, b.confirmed_at, b.coupon_code, b.discount_cents, b.membership_id, b.user_id, b.preferred,
+      b.appointment_start_at, b.appointment_end_at,
       now, b.session_id, now, b.seats,
+      b.appointment_start_at, now, b.appointment_end_at, b.appointment_start_at,
+      b.session_id, b.appointment_end_at, b.appointment_start_at,
     ],
   );
 }
@@ -118,9 +142,19 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
     throw new HttpError(409, "unavailable");
   }
   if (input.seats > s.max_per_booking) throw new HttpError(400, "too_many_seats");
-  if (s.booking_mode === "appointment" && input.preferred.length < 3) throw new HttpError(400, "preferred_required");
 
-  if (input.membershipId) return bookWithMembership(input, s, base, user);
+  const recurringAvailability = s.booking_mode === "appointment" ? parseAvailability(s.availability_rule) : null;
+  let appointmentSlot: { startsAt: string; endsAt: string } | null = null;
+  let preferred = input.preferred;
+  if (s.booking_mode === "appointment" && recurringAvailability) {
+    if (!input.appointmentDate || !input.appointmentTime) throw new HttpError(400, "slot_required");
+    appointmentSlot = await validateAppointmentSlot(s.id, input.appointmentDate, input.appointmentTime);
+    preferred = formatWhen(appointmentSlot.startsAt, input.lang);
+  } else if (s.booking_mode === "appointment" && input.preferred.length < 3) {
+    throw new HttpError(400, "preferred_required");
+  }
+
+  if (input.membershipId) return bookWithMembership(input, s, base, user, appointmentSlot, preferred);
 
   const gross = s.price_cents * input.seats;
   let amount = gross;
@@ -161,12 +195,14 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
     discount_cents: discount,
     membership_id: null,
     user_id: user?.id ?? "",
-    preferred: input.preferred,
+    preferred,
+    appointment_start_at: appointmentSlot?.startsAt ?? null,
+    appointment_end_at: appointmentSlot?.endsAt ?? null,
   };
 
   if ((await insertIfCapacity(booking)) === 0) {
     await releaseCoupon(couponCode);
-    throw new HttpError(409, "full");
+    throw new HttpError(409, appointmentSlot ? "slot_unavailable" : "full", appointmentSlot ? "That time has just been booked. Please choose another slot." : undefined);
   }
 
   if (!paid) {
@@ -186,7 +222,14 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
 }
 
 /** Books one place paid with a membership card: one credit off the card, nothing to pay. */
-async function bookWithMembership(input: z.infer<typeof checkoutInput>, s: SessionRow, base: string, user: AuthUser | null) {
+async function bookWithMembership(
+  input: z.infer<typeof checkoutInput>,
+  s: SessionRow,
+  base: string,
+  user: AuthUser | null,
+  appointmentSlot: { startsAt: string; endsAt: string } | null,
+  preferred: string,
+) {
   if (!user) throw new HttpError(401, "login_required", "Please log in to use your membership.");
   if (input.seats !== 1) throw new HttpError(400, "membership_one_seat", "A membership pays for one place per booking.");
   const m = (await usableFor(user, s)).find((x) => x.id === input.membershipId);
@@ -215,11 +258,13 @@ async function bookWithMembership(input: z.infer<typeof checkoutInput>, s: Sessi
     discount_cents: 0,
     membership_id: m.id,
     user_id: user.id,
-    preferred: input.preferred,
+    preferred,
+    appointment_start_at: appointmentSlot?.startsAt ?? null,
+    appointment_end_at: appointmentSlot?.endsAt ?? null,
   };
   if ((await insertIfCapacity(booking)) === 0) {
     await returnCredit(m.id);
-    throw new HttpError(409, "full");
+    throw new HttpError(409, appointmentSlot ? "slot_unavailable" : "full", appointmentSlot ? "That time has just been booked. Please choose another slot." : undefined);
   }
   await sendBookingConfirmed((await getBooking(booking.id))!, s, base);
   return { ref: booking.ref, token: booking.token };
@@ -228,7 +273,9 @@ async function bookWithMembership(input: z.infer<typeof checkoutInput>, s: Sessi
 async function createCheckout(b: NewBooking, s: SessionRow, base: string): Promise<string> {
   const title = b.lang === "en" && s.title_en ? s.title_en : s.title_nl;
   const where = s.is_online ? "Online" : s.venue;
-  const when = s.booking_mode === "appointment" ? (b.lang === "en" ? "By appointment" : "Op afspraak") : formatWhen(s.starts_at, b.lang);
+  const when = b.appointment_start_at
+    ? formatWhen(b.appointment_start_at, b.lang)
+    : s.booking_mode === "appointment" ? (b.lang === "en" ? "By appointment" : "Op afspraak") : formatWhen(s.starts_at, b.lang);
   const description = [when, where].filter(Boolean).join(" · ");
   // With a discount the total is charged as one line, so Stripe shows exactly what was agreed.
   const line: Stripe.Checkout.SessionCreateParams.LineItem = b.discount_cents
@@ -308,7 +355,7 @@ export async function applyCheckoutSession(cs: Stripe.Checkout.Session, base: st
     // Delayed payment method (e.g. bank transfer): keep the place until the outcome arrives.
     const b = await getBooking(id);
     const s = b && (await getSessionRow(b.session_id));
-    if (b && s) await run(`UPDATE bookings SET hold_until = ? WHERE id = ? AND status = 'pending'`, [s.starts_at, id]);
+    if (b && s) await run(`UPDATE bookings SET hold_until = ? WHERE id = ? AND status = 'pending'`, [b.appointment_start_at ?? s.starts_at, id]);
   } else if (cs.status === "expired") {
     await expireBooking(id);
   }
@@ -353,7 +400,8 @@ export async function cancelBooking(
   if (b.status !== "confirmed") throw new HttpError(409, "not_cancellable", "Only confirmed bookings can be cancelled.");
   const s = await getSessionRow(b.session_id);
   if (!s) throw new HttpError(404, "not_found");
-  if (opts.by === "customer" && Date.parse(s.starts_at) <= Date.now()) {
+  const bookingStartsAt = b.appointment_start_at ?? s.starts_at;
+  if (opts.by === "customer" && Date.parse(bookingStartsAt) <= Date.now()) {
     throw new HttpError(409, "too_late", "This session has already started.");
   }
 
@@ -451,6 +499,8 @@ export async function createManualBooking(input: z.infer<typeof manualInput>, ba
     membership_id: null,
     user_id: "",
     preferred: "",
+    appointment_start_at: null,
+    appointment_end_at: null,
   };
   if ((await insertIfCapacity(booking)) === 0) {
     throw new HttpError(409, "full", "Not enough places left (or the session is not published / already past). Increase the capacity first.");
@@ -472,13 +522,16 @@ export function customerView(b: BookingRow, s: SessionRow) {
     amountCents: b.amount_cents,
     refundedCents: b.refunded_cents,
     lang: b.lang,
-    session,
+    session: b.appointment_start_at
+      ? { ...session, startsAt: b.appointment_start_at }
+      : session,
     onlineLink: b.status === "confirmed" && s.is_online ? s.online_link : "",
     cancel: refundPreview(b, s),
     couponCode: b.coupon_code,
     discountCents: b.discount_cents,
     paidWithMembership: !!b.membership_id,
     preferred: b.preferred,
+    appointmentStartAt: b.appointment_start_at,
   };
 }
 
