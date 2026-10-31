@@ -375,7 +375,7 @@ export async function syncMissingStandard(weeks: number, previewOnly: boolean) {
       const matches = rows.filter((row) => {
         if (!relatedToOffering(row, o)) return false;
         if (o.weekly) return row.date === date;
-        return row.booking_mode === "appointment" && row.date >= today && Date.parse(row.starts_at) > Date.now();
+        return row.date >= today && Date.parse(row.starts_at) > Date.now();
       });
 
       if (matches.length > 0) {
