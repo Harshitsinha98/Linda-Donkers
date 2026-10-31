@@ -267,6 +267,182 @@ function ResetDialog({ onClose, onDone }: { onClose: () => void; onDone: () => v
   );
 }
 
+type StandardSyncCandidate = {
+  offering: string;
+  title: string;
+  date: string;
+  startTime: string;
+  bookingMode: "scheduled" | "appointment";
+  section: string;
+  isOnline: boolean;
+  status: "published" | "draft";
+  durationMin: number;
+  priceCents: number;
+};
+
+type StandardSyncConflict = {
+  offering: string;
+  title: string;
+  existingTitle: string;
+  date: string;
+  existingTime: string;
+  expectedTime: string;
+  reason: string;
+};
+
+type StandardSyncReport = {
+  weeks: number;
+  previewOnly: boolean;
+  plannedCount: number;
+  createdCount: number;
+  skippedCount: number;
+  conflictCount: number;
+  candidates: StandardSyncCandidate[];
+  created: { id: string; offering: string; title: string; date: string; startTime: string; status: string }[];
+  skipped: { offering: string; title: string; date: string; reason: string }[];
+  conflicts: StandardSyncConflict[];
+};
+
+/** Safe alternative to Reset: preview and add only missing regular offerings. */
+function SyncDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [weeks, setWeeks] = useState("8");
+  const [report, setReport] = useState<StandardSyncReport | null>(null);
+  const [applied, setApplied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const preview = async () => {
+    setBusy(true);
+    setError("");
+    setApplied(false);
+    try {
+      const r = await adminApi<StandardSyncReport>("/api/admin/sessions", {
+        method: "POST",
+        body: JSON.stringify({ action: "previewStandard", weeks: Number(weeks) || 8 }),
+      });
+      setReport(r);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not preview the standard schedule.");
+    }
+    setBusy(false);
+  };
+
+  const create = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await adminApi<StandardSyncReport>("/api/admin/sessions", {
+        method: "POST",
+        body: JSON.stringify({ action: "createMissingStandard", weeks: Number(weeks) || 8 }),
+      });
+      setReport(r);
+      setApplied(true);
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create the missing sessions.");
+    }
+    setBusy(false);
+  };
+
+  const draftCount = report?.candidates.filter((x) => x.status === "draft").length ?? 0;
+  const visible = report?.candidates.slice(0, 14) ?? [];
+
+  return (
+    <Modal title="Add missing standard sessions" onClose={onClose} wide>
+      <div className="grid gap-4 text-forest">
+        <p className="text-sm text-forest/75">
+          This checks Linda's standard offer against the sessions already in the database. It never deletes or edits existing sessions, bookings, prices or memberships. Conflicts are shown separately and left untouched.
+        </p>
+        <Label text="Plan weekly sessions for how many weeks?">
+          <input type="number" min={1} max={26} className={input + " max-w-[8rem]"} value={weeks} onChange={(e) => setWeeks(e.target.value)} />
+        </Label>
+        <div className="flex flex-wrap gap-3">
+          <Btn disabled={busy || !(Number(weeks) >= 1 && Number(weeks) <= 26)} onClick={preview}>
+            {busy && !applied ? "Checking…" : "Preview missing sessions"}
+          </Btn>
+          <Btn kind="ghost" onClick={onClose}>Close</Btn>
+        </div>
+        {report && (
+          <div className="grid gap-4 rounded-2xl bg-cream p-4">
+            {applied ? (
+              <p className="font-semibold text-green-800">
+                Created {report.createdCount} session(s). Existing entries were left unchanged.
+              </p>
+            ) : (
+              <p className="font-semibold text-ink">
+                Preview: {report.plannedCount} missing session(s) can be added.
+              </p>
+            )}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-white p-3">
+                <p className="font-display text-2xl">{applied ? report.createdCount : report.plannedCount}</p>
+                <p className="text-xs text-forest/65">{applied ? "Created" : "To add"}</p>
+              </div>
+              <div className="rounded-xl bg-white p-3">
+                <p className="font-display text-2xl">{report.skippedCount}</p>
+                <p className="text-xs text-forest/65">Already present</p>
+              </div>
+              <div className="rounded-xl bg-white p-3">
+                <p className="font-display text-2xl">{report.conflictCount}</p>
+                <p className="text-xs text-forest/65">Conflicts</p>
+              </div>
+            </div>
+            {draftCount > 0 && !applied && (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+                {draftCount} online session(s) will be created as drafts. Add their private Zoom / Meet link in Edit, then publish them.
+              </p>
+            )}
+            {visible.length > 0 && (
+              <div>
+                <p className="mb-2 text-sm font-semibold">Sessions to add</p>
+                <ul className="max-h-52 space-y-2 overflow-y-auto text-sm">
+                  {visible.map((x, i) => (
+                    <li key={x.offering + x.date} className="flex flex-wrap items-start justify-between gap-2 border-b border-forest/10 pb-2">
+                      <span>{x.title}</span>
+                      <span className="text-right text-forest/65">
+                        {x.bookingMode === "appointment" ? "By appointment" : x.date + " · " + x.startTime}
+                        {x.status === "draft" ? " · draft" : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {report.candidates.length > visible.length && (
+                  <p className="mt-2 text-xs text-forest/60">And {report.candidates.length - visible.length} more…</p>
+                )}
+              </div>
+            )}
+            {report.conflicts.length > 0 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+                <p className="font-semibold text-amber-950">Needs manual review — not changed</p>
+                <ul className="mt-2 space-y-3 text-sm text-amber-950">
+                  {report.conflicts.map((x, i) => (
+                    <li key={x.offering + x.date + i}>
+                      <strong>{x.title}</strong>
+                      <p>Existing: {x.existingTitle} · {x.date} · {x.existingTime}</p>
+                      <p>Expected: {x.expectedTime}</p>
+                      <p className="text-amber-900/80">{x.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {report.plannedCount === 0 && report.conflictCount === 0 && (
+              <p className="text-sm text-forest/70">Everything in this standard schedule is already present. Nothing needs to be added.</p>
+            )}
+            {!applied && report.plannedCount > 0 && (
+              <div className="flex flex-wrap items-center justify-end gap-3 border-t border-forest/10 pt-3">
+                <p className="mr-auto text-xs text-forest/60">Only the {report.plannedCount} safe, missing entries will be created. Conflicts will remain untouched.</p>
+                <Btn disabled={busy} onClick={create}>{"Create " + report.plannedCount + " missing sessions"}</Btn>
+              </div>
+            )}
+          </div>
+        )}
+        <ErrorNote text={error} />
+      </div>
+    </Modal>
+  );
+}
+
 function SessionsTab() {
   const [scope, setScope] = useState<"upcoming" | "past">("upcoming");
   const [list, setList] = useState<AdminSession[] | null>(null);
@@ -274,6 +450,7 @@ function SessionsTab() {
   const [editing, setEditing] = useState<AdminSession | "new" | null>(null);
   const [viewing, setViewing] = useState<AdminSession | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(() => {
     adminApi<{ sessions: AdminSession[] }>(`/api/admin/sessions?scope=${scope}`)
@@ -308,6 +485,9 @@ function SessionsTab() {
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Btn kind="ghost" onClick={() => setSyncing(true)}>
+            Add missing standard sessions
+          </Btn>
           <Btn kind="ghost" onClick={() => setResetting(true)}>
             Reset to standard schedule
           </Btn>
@@ -363,6 +543,7 @@ function SessionsTab() {
       )}
       {viewing && <SessionBookings session={viewing} onClose={() => setViewing(null)} onChanged={load} />}
       {resetting && <ResetDialog onClose={() => setResetting(false)} onDone={load} />}
+      {syncing && <SyncDialog onClose={() => setSyncing(false)} onDone={load} />}
     </>
   );
 }
