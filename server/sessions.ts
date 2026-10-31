@@ -293,6 +293,11 @@ type StandardSyncCandidate = {
   priceCents: number;
 };
 
+type StandardSyncRow = Pick<SessionRow,
+  | "id" | "title_nl" | "title_en" | "category" | "is_online" | "date" | "start_time"
+  | "starts_at" | "duration_min" | "price_cents" | "offering" | "booking_mode" | "status"
+>;
+
 type StandardSyncConflict = {
   offering: string;
   title: string;
@@ -308,7 +313,7 @@ function comparableTitle(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function relatedToOffering(row: SessionRow, offering: (typeof OFFERINGS)[number]): boolean {
+function relatedToOffering(row: StandardSyncRow, offering: (typeof OFFERINGS)[number]): boolean {
   if (row.offering === offering.key) return true;
   if (row.category !== offering.category) return false;
 
@@ -334,7 +339,7 @@ function relatedToOffering(row: SessionRow, offering: (typeof OFFERINGS)[number]
  */
 export async function syncMissingStandard(weeks: number, previewOnly: boolean) {
   const today = todayBE();
-  const rows = await all<SessionRow>(`SELECT * FROM sessions`, []);
+  const rows = await all<StandardSyncRow>(`SELECT id, title_nl, title_en, category, is_online, date, start_time, starts_at, duration_min, price_cents, offering, booking_mode, status FROM sessions`, []);
   const candidates: StandardSyncCandidate[] = [];
   const conflicts: StandardSyncConflict[] = [];
   const skipped: { offering: string; title: string; date: string; reason: string }[] = [];
@@ -426,8 +431,7 @@ export async function syncMissingStandard(weeks: number, previewOnly: boolean) {
         const payload: SessionInput = { ...base, date, startTime: o.weekly?.time ?? APPOINTMENT_TIME };
         const [id] = await createSessions(payload, 0);
         created.push({ id, offering: o.key, title: o.titleEn, date, startTime: payload.startTime, status: payload.status });
-        const inserted = await getSessionRow(id);
-        if (inserted) rows.push(inserted);
+
       }
     }
   }
