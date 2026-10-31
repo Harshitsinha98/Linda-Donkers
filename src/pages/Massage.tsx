@@ -1,5 +1,6 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
+import { Link } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { IMG, ROUTES, sm, waLink } from "../data/site";
 
@@ -89,14 +90,12 @@ export default function Massage() {
                       <div className="mt-auto pt-6">
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sand/70 px-5 py-4">
                           <p className="text-sm font-semibold text-forest">{tr.package}</p>
-                          <a
-                            href={waLink(`${m.packageText} ${tr.name}`)}
-                            target="_blank"
-                            rel="noreferrer"
+                          <Link
+                            to={ROUTES.memberships}
                             className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold uppercase tracking-[0.14em] text-saffron underline-offset-4 hover:underline"
                           >
                             {m.packageCta} <Arrow className="h-3.5 w-3.5" />
-                          </a>
+                          </Link>
                         </div>
                       </div>
                     )}

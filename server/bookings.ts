@@ -3,7 +3,10 @@ import { all, get, run } from "./db.js";
 import { sendBookingCancelled, sendBookingConfirmed } from "./email.js";
 import { HttpError, newId, newRef, newToken, safeEqual } from "./http.js";
 import { getSessionRow, getSessionWithTaken, TAKEN_SQL, toPublic, type SessionRow } from "./sessions.js";
-import { Stripe, stripe, stripeConfigured } from "./stripe.js";
+import type { AuthUser } from "./auth.js";
+import { quoteCoupon } from "./coupons.js";
+import { applyMembershipCheckout, consumeCredits, restoreCredits } from "./memberships.js";
+import { createCheckoutSession, Stripe, stripe, stripeConfigured } from "./stripe.js";
 import { formatWhen, nowIso } from "./time.js";
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "expired";
@@ -30,6 +33,11 @@ export type BookingRow = {
   confirmed_at: string | null;
   cancelled_at: string | null;
   cancelled_by: string | null;
+  user_id: string | null;
+  coupon_id: string | null;
+  discount_cents: number;
+  pass_id: string | null;
+  credits_used: number;
 };
 
 /** Stripe Checkout must stay open at least 30 minutes; the place is held a little longer than that. */
@@ -49,8 +57,9 @@ export function refundPercent(startsAt: string, now = Date.now()): 0 | 50 | 100 
 export function refundPreview(b: BookingRow, s: SessionRow) {
   const allowed = b.status === "confirmed" && Date.parse(s.starts_at) > Date.now();
   const percent = refundPercent(s.starts_at);
+  const creditsBack = b.pass_id && percent === 100 ? b.credits_used : 0;
   const cents = b.stripe_payment_intent ? Math.max(0, Math.round((b.amount_cents * percent) / 100) - b.refunded_cents) : 0;
-  return { allowed, percent, cents };
+  return { allowed, percent, cents, creditsBack, paidWithPass: !!b.pass_id };
 }
 
 /* ---------------- lookups ---------------- */
@@ -75,39 +84,64 @@ export const checkoutInput = z.object({
   seats: z.number().int().min(1).max(50),
   lang: z.enum(["nl", "en"]).default("nl"),
   acceptTerms: z.literal(true),
+  couponCode: z.string().trim().max(40).default(""),
+  /** Pay with a membership instead of money (requires login). */
+  passId: z.string().max(64).default(""),
 });
 
 /**
  * Reserves places in one atomic INSERT ... SELECT that only succeeds while enough
  * capacity is left, so the session can never be overbooked by concurrent requests.
  */
-async function insertIfCapacity(b: Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">) {
+type NewBooking = Omit<BookingRow, "refunded_cents" | "stripe_checkout_id" | "stripe_payment_intent" | "cancelled_at" | "cancelled_by">;
+
+async function insertIfCapacity(b: NewBooking) {
   const now = nowIso();
   return run(
-    `INSERT INTO bookings (id, ref, token, session_id, name, email, phone, note, seats, amount_cents, lang, source, status, hold_until, created_at, confirmed_at)
-     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    `INSERT INTO bookings (id, ref, token, session_id, name, email, phone, note, seats, amount_cents, lang, source, status, hold_until, created_at, confirmed_at,
+       user_id, coupon_id, discount_cents, pass_id, credits_used)
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
      WHERE (SELECT s.capacity - ${TAKEN_SQL} FROM sessions s WHERE s.id = ? AND s.status = 'published' AND s.starts_at > ?) >= ?`,
     [
       b.id, b.ref, b.token, b.session_id, b.name, b.email, b.phone, b.note, b.seats, b.amount_cents, b.lang, b.source,
-      b.status, b.hold_until, b.created_at, b.confirmed_at,
+      b.status, b.hold_until, b.created_at, b.confirmed_at, b.user_id, b.coupon_id, b.discount_cents, b.pass_id, b.credits_used,
       now, b.session_id, now, b.seats,
     ],
   );
 }
 
-export async function createWebBooking(input: z.infer<typeof checkoutInput>, base: string) {
+/** Checks a coupon for a session booking (used by the booking form's "Apply" button and at checkout). */
+export async function quoteForSession(sessionId: string, seats: number, code: string, email?: string) {
+  const s = await getSessionRow(sessionId);
+  if (!s || s.status !== "published") throw new HttpError(409, "unavailable");
+  const subtotal = s.price_cents * Math.max(1, seats);
+  const { coupon, discountCents } = await quoteCoupon(code, { kind: "session", offer: s.offer }, subtotal, email);
+  return { coupon, subtotalCents: subtotal, discountCents, totalCents: subtotal - discountCents };
+}
+
+export async function createWebBooking(input: z.infer<typeof checkoutInput>, base: string, user: AuthUser | null) {
   const s = await getSessionRow(input.sessionId);
   if (!s || s.status !== "published" || Date.parse(s.starts_at) <= Date.now()) {
     throw new HttpError(409, "unavailable");
   }
   if (input.seats > s.max_per_booking) throw new HttpError(400, "too_many_seats");
 
-  const amount = s.price_cents * input.seats;
+  if (input.passId) return bookWithPass(input, s, base, user);
+
+  const subtotal = s.price_cents * input.seats;
+  let discount = 0;
+  let couponId: string | null = null;
+  if (input.couponCode && subtotal > 0) {
+    const q = await quoteCoupon(input.couponCode, { kind: "session", offer: s.offer }, subtotal, input.email);
+    discount = q.discountCents;
+    couponId = q.coupon.id;
+  }
+  const amount = subtotal - discount;
   const paid = amount > 0;
   if (paid && !stripeConfigured()) throw new HttpError(503, "payments_unavailable");
 
   const now = nowIso();
-  const booking = {
+  const booking: NewBooking = {
     id: newId(),
     ref: newRef(),
     token: newToken(),
@@ -124,6 +158,11 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
     hold_until: paid ? new Date(Date.now() + HOLD_MS).toISOString() : null,
     created_at: now,
     confirmed_at: paid ? null : now,
+    user_id: user?.id ?? null,
+    coupon_id: couponId,
+    discount_cents: discount,
+    pass_id: null,
+    credits_used: 0,
   };
 
   if ((await insertIfCapacity(booking)) === 0) throw new HttpError(409, "full");
@@ -144,25 +183,64 @@ export async function createWebBooking(input: z.infer<typeof checkoutInput>, bas
   }
 }
 
+/** Books with membership credits: no payment, 1 credit per person. */
+async function bookWithPass(input: z.infer<typeof checkoutInput>, s: SessionRow, base: string, user: AuthUser | null) {
+  if (!user) throw new HttpError(401, "login_required", "Please log in to use your membership.");
+  await consumeCredits(input.passId, user, input.seats, s);
+  const now = nowIso();
+  const booking: NewBooking = {
+    id: newId(),
+    ref: newRef(),
+    token: newToken(),
+    session_id: s.id,
+    name: input.name,
+    email: user.email,
+    phone: input.phone,
+    note: input.note,
+    seats: input.seats,
+    amount_cents: 0,
+    lang: input.lang,
+    source: "web",
+    status: "confirmed",
+    hold_until: null,
+    created_at: now,
+    confirmed_at: now,
+    user_id: user.id,
+    coupon_id: null,
+    discount_cents: 0,
+    pass_id: input.passId,
+    credits_used: input.seats,
+  };
+  if ((await insertIfCapacity(booking)) === 0) {
+    await restoreCredits(input.passId, input.seats);
+    throw new HttpError(409, "full");
+  }
+  await sendBookingConfirmed((await getBooking(booking.id))!, s, base);
+  return { ref: booking.ref, token: booking.token };
+}
+
 async function createCheckout(
-  b: { id: string; ref: string; token: string; email: string; seats: number; lang: string },
+  b: { id: string; ref: string; token: string; email: string; seats: number; lang: string; amount_cents: number; discount_cents: number },
   s: SessionRow,
   base: string,
 ): Promise<string> {
   const title = b.lang === "en" && s.title_en ? s.title_en : s.title_nl;
   const where = s.is_online ? "Online" : s.venue;
-  const params: Stripe.Checkout.SessionCreateParams = {
-    mode: "payment",
-    line_items: [
-      {
-        quantity: b.seats,
+  const description = [formatWhen(s.starts_at, b.lang), where].filter(Boolean).join(" · ");
+  // With a discount the total isn't always divisible by the number of people, so it's one line for the total.
+  const line: Stripe.Checkout.SessionCreateParams.LineItem = b.discount_cents
+    ? {
+        quantity: 1,
         price_data: {
           currency: "eur",
-          unit_amount: s.price_cents,
-          product_data: { name: title, description: [formatWhen(s.starts_at, b.lang), where].filter(Boolean).join(" · ") },
+          unit_amount: b.amount_cents,
+          product_data: { name: b.seats > 1 ? `${title} × ${b.seats}` : title, description: `${description} · −${(b.discount_cents / 100).toFixed(2)} EUR` },
         },
-      },
-    ],
+      }
+    : { quantity: b.seats, price_data: { currency: "eur", unit_amount: s.price_cents, product_data: { name: title, description } } };
+  const params: Stripe.Checkout.SessionCreateParams = {
+    mode: "payment",
+    line_items: [line],
     customer_email: b.email,
     client_reference_id: b.id,
     metadata: { booking_id: b.id, ref: b.ref },
@@ -173,15 +251,7 @@ async function createCheckout(
     cancel_url: `${base}/boeking/${b.ref}?t=${b.token}&aborted=1`,
   };
 
-  let cs: Stripe.Checkout.Session;
-  try {
-    // Adaptive Pricing: visitors see and pay the price in their own currency; Linda receives EUR.
-    cs = await stripe().checkout.sessions.create({ ...params, adaptive_pricing: { enabled: true } }, { idempotencyKey: `checkout-${b.id}` });
-  } catch (err) {
-    if (!(err instanceof Stripe.errors.StripeInvalidRequestError) || !/adaptive/i.test(err.message)) throw err;
-    console.warn("[stripe] Adaptive Pricing unavailable for this account, continuing in EUR only:", err.message);
-    cs = await stripe().checkout.sessions.create(params, { idempotencyKey: `checkout-${b.id}-eur` });
-  }
+  const cs = await createCheckoutSession(params, `checkout-${b.id}`);
   await run(`UPDATE bookings SET stripe_checkout_id = ? WHERE id = ?`, [cs.id, b.id]);
   if (!cs.url) throw new Error("Stripe returned no checkout URL");
   return cs.url;
@@ -213,6 +283,7 @@ const intentId = (cs: Stripe.Checkout.Session) =>
 
 /** Applies a Checkout Session's state to its booking (used by the webhook and as a fallback check). */
 export async function applyCheckoutSession(cs: Stripe.Checkout.Session, base: string) {
+  if (cs.metadata?.kind === "membership") return applyMembershipCheckout(cs, base);
   const id = cs.metadata?.booking_id || cs.client_reference_id;
   if (!id) return;
   if (cs.status === "complete" && (cs.payment_status === "paid" || cs.payment_status === "no_payment_required")) {
@@ -291,6 +362,8 @@ export async function cancelBooking(
      WHERE id = ? AND status = 'confirmed'`,
     [nowIso(), opts.by, refund, b.id],
   );
+  // Membership bookings: the credits come back when the cancellation would have been a full refund.
+  if (changed && b.pass_id && b.credits_used > 0 && percent === 100) await restoreCredits(b.pass_id, b.credits_used);
   if (changed) {
     const updated = (await getBooking(b.id))!;
     await sendBookingCancelled(updated, s, refund, opts.by, !!opts.sessionCancelled, opts.base);
@@ -357,6 +430,11 @@ export async function createManualBooking(input: z.infer<typeof manualInput>, ba
     hold_until: null,
     created_at: now,
     confirmed_at: now,
+    user_id: null,
+    coupon_id: null,
+    discount_cents: 0,
+    pass_id: null,
+    credits_used: 0,
   };
   if ((await insertIfCapacity(booking)) === 0) {
     throw new HttpError(409, "full", "Not enough places left (or the session is not published / already past). Increase the capacity first.");
@@ -377,6 +455,8 @@ export function customerView(b: BookingRow, s: SessionRow) {
     seats: b.seats,
     amountCents: b.amount_cents,
     refundedCents: b.refunded_cents,
+    discountCents: b.discount_cents ?? 0,
+    creditsUsed: b.credits_used ?? 0,
     lang: b.lang,
     session,
     onlineLink: b.status === "confirmed" && s.is_online ? s.online_link : "",
@@ -405,5 +485,9 @@ export function adminView(b: BookingRow) {
     cancelledBy: b.cancelled_by,
     holdUntil: b.hold_until,
     paidOnline: !!b.stripe_payment_intent,
+    discountCents: b.discount_cents ?? 0,
+    couponId: b.coupon_id,
+    passId: b.pass_id,
+    creditsUsed: b.credits_used ?? 0,
   };
 }

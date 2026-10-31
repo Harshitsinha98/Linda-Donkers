@@ -54,7 +54,7 @@ export function Badge({ children, tone }: { children: ReactNode; tone: "green" |
     red: "bg-red-100 text-red-700",
     blue: "bg-sky-100 text-sky-800",
   }[tone];
-  return <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${t}`}>{children}</span>;
+  return <span className={`inline-block shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${t}`}>{children}</span>;
 }
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { cancelSession } from "../../server/bookings.js";
 import { handler, HttpError, json, query, readBody, requireAdmin, siteUrl } from "../../server/http.js";
+import { resetSchedule } from "../../server/schedule.js";
 import {
   createSessions,
   deleteSession,
@@ -23,6 +24,7 @@ const postBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("duplicate"), id: z.string().min(1) }),
   z.object({ action: z.literal("cancel"), id: z.string().min(1) }),
   z.object({ action: z.literal("publish"), id: z.string().min(1), publish: z.boolean() }),
+  z.object({ action: z.literal("reset-schedule"), confirm: z.literal("RESET"), weeks: z.number().int().min(1).max(26).default(12) }),
 ]);
 
 /** POST /api/admin/sessions { action: create | duplicate | cancel | publish } */
@@ -46,6 +48,8 @@ export const POST = handler(async (req) => {
     }
     case "cancel":
       return json({ ok: true, ...(await cancelSession(body.id, siteUrl(req))) });
+    case "reset-schedule":
+      return json({ ok: true, ...(await resetSchedule(body.weeks)) });
   }
 });
 

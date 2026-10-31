@@ -8,6 +8,8 @@ import { adminApi, CATEGORY_LABELS, downloadCsv, euro, getPass, setPass, when, t
 import { SessionForm } from "./SessionForm";
 import { BookingRowCard, SessionBookings } from "./BookingsPanel";
 import { Badge, Btn, ErrorNote, input } from "./ui";
+import { CouponsTab } from "./CouponsPanel";
+import { MembershipsTab } from "./MembershipsPanel";
 
 function Login({ onOk }: { onOk: () => void }) {
   const [code, setCode] = useState("");
@@ -194,6 +196,36 @@ function SessionsTab() {
   }, [scope]);
   useEffect(load, [load]);
 
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState("");
+  const resetAgenda = async () => {
+    const ok = window.prompt(
+      "This DELETES every session that has no active booking, and creates your standard schedule:\n\n" +
+        "• Group class Mon 19:30 and Wed 09:30 (€22)\n• Online class (English) Fri 08:00 (€15)\n• Private session Sat 09:30 and online coaching Sat 11:30 (€90)\n" +
+        "for the next 12 weeks, plus one hidden draft of each massage and healing for you to date.\n\n" +
+        "Sessions with paid bookings are kept.\n\nType RESET to continue.",
+    );
+    if (ok?.trim().toUpperCase() !== "RESET") return;
+    setResetting(true);
+    setResetMsg("");
+    try {
+      const r = await adminApi<{ deleted: number; created: number; drafts: number; plansAdded: number; kept: { title: string; startsAt: string; bookings: number }[] }>(
+        "/api/admin/sessions",
+        { method: "POST", body: JSON.stringify({ action: "reset-schedule", confirm: "RESET", weeks: 12 }) },
+      );
+      setResetMsg(
+        `Done. Deleted ${r.deleted} sessions, created ${r.created} weekly sessions and ${r.drafts} drafts (massages & healing: set the date and publish).` +
+          (r.plansAdded ? `\nAdded ${r.plansAdded} memberships.` : "") +
+          (r.kept.length ? `\n\nKept because they have bookings:\n${r.kept.map((k) => `• ${k.title}, ${when(k.startsAt)} (${k.bookings} booking${k.bookings === 1 ? "" : "s"})`).join("\n")}` : ""),
+      );
+      setList(null);
+      load();
+    } catch (err) {
+      setResetMsg(err instanceof ApiError ? err.message : "Reset failed.");
+    }
+    setResetting(false);
+  };
+
   const live = (list ?? []).filter((s) => s.status === "published");
   const booked = live.reduce((n, s) => n + s.confirmedSeats, 0);
   const revenue = (list ?? []).reduce((n, s) => n + s.revenueCents, 0);
@@ -216,8 +248,14 @@ function SessionsTab() {
             </button>
           ))}
         </div>
-        <Btn onClick={() => setEditing("new")}>+ New session</Btn>
+        <div className="flex flex-wrap gap-2">
+          <Btn kind="ghost" onClick={resetAgenda} disabled={resetting}>
+            {resetting ? "Resetting…" : "Reset to standard schedule"}
+          </Btn>
+          <Btn onClick={() => setEditing("new")}>+ New session</Btn>
+        </div>
       </div>
+      {resetMsg && <p className="mt-4 whitespace-pre-line rounded-2xl bg-white p-4 text-sm text-forest">{resetMsg}</p>}
 
       {list && scope === "upcoming" && (
         <div className="mt-6 grid grid-cols-3 gap-3">
@@ -319,7 +357,7 @@ function BookingsTab() {
 export default function AdminApp() {
   usePageTitle("Admin | Linda Donkers");
   const [authed, setAuthed] = useState(() => !!getPass());
-  const [tab, setTab] = useState<"sessions" | "bookings">("sessions");
+  const [tab, setTab] = useState<"sessions" | "bookings" | "coupons" | "memberships">("sessions");
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -360,7 +398,7 @@ export default function AdminApp() {
           </div>
         </div>
         <nav className="mx-auto flex max-w-5xl gap-1 px-4 sm:px-6" aria-label="Admin">
-          {(["sessions", "bookings"] as const).map((k) => (
+          {(["sessions", "bookings", "coupons", "memberships"] as const).map((k) => (
             <button
               key={k}
               type="button"
@@ -372,7 +410,7 @@ export default function AdminApp() {
           ))}
         </nav>
       </header>
-      <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">{tab === "sessions" ? <SessionsTab /> : <BookingsTab />}</main>
+      <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">{tab === "sessions" ? <SessionsTab /> : tab === "bookings" ? <BookingsTab /> : tab === "coupons" ? <CouponsTab /> : <MembershipsTab />}</main>
     </div>
   );
 }

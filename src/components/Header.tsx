@@ -7,6 +7,28 @@ import { Logo, PoweredByInfiskies } from "./Logo";
 import { Magnetic } from "./Magnetic";
 import { setScrollLocked } from "./SmoothScroll";
 import { SocialIcons } from "./SocialLinks";
+import { useAuth } from "../lib/auth";
+
+function AccountButton() {
+  const { t } = useLang();
+  const auth = useAuth();
+  if (!auth.enabled) return null;
+  const label = auth.session ? t.nav.account : t.nav.login;
+  return (
+    <Link
+      to={ROUTES.account}
+      aria-label={label}
+      title={label}
+      className="relative grid h-11 w-11 place-items-center rounded-full border border-forest/20 text-forest transition-colors hover:border-saffron hover:text-saffron"
+    >
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden>
+        <circle cx="12" cy="8" r="3.6" />
+        <path d="M4.5 20c1.4-3.6 4.2-5.4 7.5-5.4s6.1 1.8 7.5 5.4" strokeLinecap="round" />
+      </svg>
+      {auth.session && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-cream bg-saffron" aria-hidden />}
+    </Link>
+  );
+}
 
 export function LangToggle({ light = false, compact = false }: { light?: boolean; compact?: boolean }) {
   const { lang, setLang, t } = useLang();
@@ -69,6 +91,7 @@ export function Header() {
     { to: ROUTES.yoga, label: t.nav.yoga },
     { to: ROUTES.massage, label: t.nav.massage },
     { to: ROUTES.agenda, label: t.nav.agenda },
+    { to: ROUTES.memberships, label: t.nav.memberships },
     { to: ROUTES.travel, label: t.nav.travel },
     { to: ROUTES.gallery, label: t.nav.gallery },
     { to: ROUTES.contact, label: t.nav.contact },
@@ -128,6 +151,7 @@ export function Header() {
               <div className="hidden sm:block">
                 <LangToggle />
               </div>
+              <AccountButton />
               <Magnetic>
                 <Link
                   to={ROUTES.agenda}

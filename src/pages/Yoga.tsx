@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useLang } from "../i18n/LanguageContext";
 import { Link } from "react-router-dom";
-import { IMG, ROUTES, YOUTUBE, sm, waLink } from "../data/site";
+import { IMG, ROUTES, YOUTUBE, sm } from "../data/site";
 import { Arrow } from "../components/Arrow";
 import { PageHero } from "../components/PageHero";
 import { FadeUp, RevealImage, RevealText } from "../components/Reveal";
@@ -99,11 +99,11 @@ export default function Yoga() {
             {y.offers.map((o, i) => {
               const cta =
                 o.action === "ask" ? (
-                  <a href={waLink(y.askText)} target="_blank" rel="noreferrer" className={OFFER_CTA}>
+                  <Link to={ROUTES.memberships} className={OFFER_CTA}>
                     {y.askCta} <Arrow className="h-3.5 w-3.5" />
-                  </a>
+                  </Link>
                 ) : (
-                  <Link to={`${ROUTES.agenda}?cat=yoga${o.action === "bookOnline" ? "&online=1" : ""}`} className={OFFER_CTA}>
+                  <Link to={`${ROUTES.agenda}?cat=${o.action === "bookOnline" ? "online" : "yoga"}`} className={OFFER_CTA}>
                     {y.bookCta} <Arrow className="h-3.5 w-3.5" />
                   </Link>
                 );

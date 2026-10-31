@@ -3,6 +3,8 @@
  * Email never blocks a booking: if Resend is not configured or fails, it is logged and skipped.
  */
 import type { BookingRow } from "./bookings.js";
+import { get } from "./db.js";
+import type { PassRow } from "./memberships.js";
 import type { SessionRow } from "./sessions.js";
 import { formatEuro, formatWhen } from "./time.js";
 
@@ -77,6 +79,9 @@ const copy = {
     duration: "Duur",
     seats: "Personen",
     paid: "Betaald",
+    discount: "Korting",
+    membership: "Lidmaatschap",
+    creditsLine: (used: number, code: string, left: number) => `${used} beurt${used === 1 ? "" : "en"} gebruikt van ${code} · nog ${left} over`,
     ref: "Referentie",
     link: "Online link",
     linkLater: "Linda stuurt je de link voor de sessie.",
@@ -104,6 +109,9 @@ const copy = {
     duration: "Duration",
     seats: "People",
     paid: "Paid",
+    discount: "Discount",
+    membership: "Membership",
+    creditsLine: (used: number, code: string, left: number) => `${used} credit${used === 1 ? "" : "s"} used from ${code} · ${left} left`,
     ref: "Reference",
     link: "Online link",
     linkLater: "Linda will send you the link for the session.",
@@ -157,6 +165,63 @@ ${rows([
   ]);
 }
 
+/* ---------------- memberships ---------------- */
+
+const fmtDate = (iso: string, lang: string) =>
+  new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "nl-BE", { timeZone: "Europe/Brussels", day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
+
+/** Sent when a membership starts: what it covers, credits, end date, pass code, link to the account page. */
+export async function sendPassActivated(p: PassRow, base: string, { notifyAdmin = true }: { notifyAdmin?: boolean } = {}) {
+  const en = p.lang === "en";
+  const name = en && p.name_en ? p.name_en : p.name_nl;
+  const until = p.valid_until ? fmtDate(p.valid_until, p.lang) : "-";
+  const account = `${base.replace(/\/+$/, "")}/account`;
+  const agenda = `${base.replace(/\/+$/, "")}/agenda`;
+  const details: [string, string][] = en
+    ? [
+        ["Membership", esc(name)],
+        ["Credits", `${p.credits_total - p.credits_used} of ${p.credits_total}`],
+        ["Valid until", esc(until)],
+        ["Membership code", `<strong>${esc(p.code)}</strong>`],
+        ...(p.amount_cents > 0 ? ([["Paid", esc(formatEuro(p.amount_cents, "en"))]] as [string, string][]) : []),
+      ]
+    : [
+        ["Lidmaatschap", esc(name)],
+        ["Beurten", `${p.credits_total - p.credits_used} van ${p.credits_total}`],
+        ["Geldig tot", esc(until)],
+        ["Lidmaatschapscode", `<strong>${esc(p.code)}</strong>`],
+        ...(p.amount_cents > 0 ? ([["Betaald", esc(formatEuro(p.amount_cents, "nl"))]] as [string, string][]) : []),
+      ];
+  const how = en
+    ? `To book: log in on the website with <strong>${esc(p.email)}</strong> (Google or an email link), choose a session in the agenda and pick "Use my membership". Each person uses one credit. Cancel at least 48 hours before and the credit comes back.`
+    : `Zo boek je: log in op de website met <strong>${esc(p.email)}</strong> (Google of een e-maillink), kies een sessie in de agenda en kies "Gebruik mijn lidmaatschap". Per persoon gebruik je één beurt. Annuleer je minstens 48 uur vooraf, dan krijg je de beurt terug.`;
+  const customer = layout(`
+<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">${en ? "Your membership is active 🌿" : "Je lidmaatschap is actief 🌿"}</p>
+<p style="font-size:15px;line-height:1.6;margin:12px 0 0">${p.buyer_name ? esc(en ? `Hello ${p.buyer_name},` : `Hallo ${p.buyer_name},`) + "<br>" : ""}${en ? "Thank you! Here are the details of your membership." : "Dankjewel! Hier zijn de gegevens van je lidmaatschap."}</p>
+${rows(details)}
+<p style="font-size:14px;line-height:1.6;margin:0">${how}</p>
+<p style="margin:20px 0 0">${button(agenda, en ? "Book a session" : "Boek een sessie")}${button(account, en ? "My account" : "Mijn account", "#2e3a2f")}</p>
+<p style="margin:26px 0 0;font-size:15px;line-height:1.6">${en ? "Warm regards,<br>Linda" : "Warme groet,<br>Linda"}</p>`);
+
+  const tasks = [send(p.email, en ? `Your membership: ${name}` : `Je lidmaatschap: ${name}`, customer, ADMIN_EMAIL())];
+  if (notifyAdmin) {
+    const admin = layout(`
+<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">New membership sold 🌿</p>
+${rows([
+  ["Membership", esc(p.name_nl)],
+  ["Customer", esc(p.buyer_name || "-")],
+  ["Email", `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`],
+  ["Paid", esc(formatEuro(p.amount_cents, "en"))],
+  ...(p.discount_cents > 0 ? ([["Coupon discount", esc(formatEuro(p.discount_cents, "en"))]] as [string, string][]) : []),
+  ["Code", esc(p.code)],
+  ["Valid until", esc(p.valid_until ? fmtDate(p.valid_until, "en") : "-")],
+])}
+${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`);
+    tasks.push(send(ADMIN_EMAIL(), `New membership: ${p.buyer_name || p.email} · ${p.name_nl}`, admin, p.email));
+  }
+  await Promise.all(tasks);
+}
+
 /* ---------------- confirmations ---------------- */
 
 export async function sendBookingConfirmed(
@@ -174,7 +239,12 @@ export async function sendBookingConfirmed(
     [c.where, esc(place(s))],
     [c.seats, String(b.seats)],
   ];
+  if (b.discount_cents > 0) details.push([c.discount, `−${esc(formatEuro(b.discount_cents, b.lang))}`]);
   if (b.amount_cents > 0) details.push([c.paid, esc(formatEuro(b.amount_cents, b.lang))]);
+  if (b.pass_id) {
+    const p = await get<{ code: string; left: number }>(`SELECT code, credits_total - credits_used AS left FROM member_passes WHERE id = ?`, [b.pass_id]);
+    if (p) details.push([c.membership, esc(c.creditsLine(b.credits_used, p.code, p.left))]);
+  }
   if (s.is_online) {
     details.push([c.link, s.online_link ? `<a href="${esc(s.online_link)}" style="color:#e8762b">${esc(s.online_link)}</a>` : esc(c.linkLater)]);
   }
@@ -197,7 +267,8 @@ ${button(waTo(WHATSAPP(), c.waText(b.ref)), c.whatsapp, "#25a244")}
     ["Email", `<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>`],
     ["Phone", esc(b.phone || "-")],
     ["People", String(b.seats)],
-    ["Paid", b.source === "manual" ? "Added manually" : esc(formatEuro(b.amount_cents, "en"))],
+    ["Paid", b.source === "manual" ? "Added manually" : b.pass_id ? `Membership (${b.credits_used} credit${b.credits_used === 1 ? "" : "s"})` : esc(formatEuro(b.amount_cents, "en"))],
+    ...(b.discount_cents > 0 ? ([["Coupon discount", esc(formatEuro(b.discount_cents, "en"))]] as [string, string][]) : []),
     ["Reference", esc(b.ref)],
   ];
   if (b.note) adminDetails.push(["Message", nl2br(b.note)]);

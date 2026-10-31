@@ -2,6 +2,7 @@ import { z } from "zod";
 import { all, get, run } from "./db.js";
 import { HttpError, newId } from "./http.js";
 import { addDays, nowIso, zonedToUtc } from "./time.js";
+import { COVER_KEYS, OFFER_KEYS, sectionOf } from "../shared/catalog.js";
 
 export const CATEGORIES = ["yoga", "gong", "workshop", "massage", "healing", "online", "retreat", "other"] as const;
 
@@ -24,6 +25,8 @@ export type SessionRow = {
   price_cents: number;
   max_per_booking: number;
   image: string;
+  offer: string;
+  cover: string;
   status: "draft" | "published" | "cancelled";
   created_at: string;
   updated_at: string;
@@ -55,6 +58,9 @@ export function toPublic(row: SessionRow & { taken?: number }) {
     capacity: row.capacity,
     spotsLeft: Math.max(0, row.capacity - (row.taken ?? 0)),
     maxPerBooking: row.max_per_booking,
+    offer: row.offer ?? "",
+    cover: row.cover ?? "",
+    section: sectionOf({ category: row.category, isOnline: !!row.is_online }),
     // The image itself is served separately so list payloads stay small.
     hasImage: !!row.image,
     imageUrl: row.image ? `/api/session-image?id=${row.id}&v=${Date.parse(row.updated_at) || 0}` : "",
@@ -108,6 +114,8 @@ export const sessionInput = z.object({
   priceCents: z.number().int().min(0).max(1_000_000),
   maxPerBooking: z.number().int().min(1).max(50),
   status: z.enum(["draft", "published"]).default("published"),
+  offer: z.enum(["", ...OFFER_KEYS] as const).default(""),
+  cover: z.enum(["", ...COVER_KEYS] as [string, ...string[]]).default(""),
   // Optional cover photo as a data URL (data:image/...;base64,...). Empty string keeps the current image on update.
   imageData: z.string().max(3_500_000).default(""),
   removeImage: z.boolean().default(false),
@@ -167,6 +175,8 @@ function columns(input: SessionInput) {
     price_cents: input.priceCents,
     max_per_booking: Math.min(input.maxPerBooking, input.capacity),
     status: input.status,
+    offer: input.offer,
+    cover: input.cover,
   };
 }
 
@@ -247,6 +257,8 @@ export function rowToInput(row: SessionRow): SessionInput {
     priceCents: row.price_cents,
     maxPerBooking: row.max_per_booking,
     status: row.status === "cancelled" ? "draft" : row.status,
+    offer: (OFFER_KEYS as readonly string[]).includes(row.offer) ? (row.offer as SessionInput["offer"]) : "",
+    cover: (COVER_KEYS as readonly string[]).includes(row.cover) ? (row.cover as SessionInput["cover"]) : "",
     imageData: "",
     removeImage: false,
   };

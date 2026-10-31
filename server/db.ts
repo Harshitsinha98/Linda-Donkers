@@ -79,6 +79,94 @@ const SCHEMA = [
      CHECK (status IN ('subscribed','unsubscribed'))
    )`,
   `CREATE INDEX IF NOT EXISTS subscribers_status ON subscribers (status)`,
+  `CREATE TABLE IF NOT EXISTS coupons (
+     id               TEXT PRIMARY KEY,
+     code             TEXT NOT NULL UNIQUE,
+     description      TEXT NOT NULL DEFAULT '',
+     kind             TEXT NOT NULL,
+     value            INTEGER NOT NULL,
+     applies_to       TEXT NOT NULL DEFAULT 'all',
+     offers           TEXT NOT NULL DEFAULT '[]',
+     max_uses         INTEGER,
+     once_per_email   INTEGER NOT NULL DEFAULT 0,
+     valid_from       TEXT,
+     valid_until      TEXT,
+     active           INTEGER NOT NULL DEFAULT 1,
+     created_at       TEXT NOT NULL,
+     updated_at       TEXT NOT NULL,
+     CHECK (kind IN ('percent','amount')),
+     CHECK (value >= 1),
+     CHECK (applies_to IN ('all','sessions','memberships'))
+   )`,
+  `CREATE TABLE IF NOT EXISTS membership_plans (
+     id              TEXT PRIMARY KEY,
+     name_nl         TEXT NOT NULL,
+     name_en         TEXT NOT NULL DEFAULT '',
+     description_nl  TEXT NOT NULL DEFAULT '',
+     description_en  TEXT NOT NULL DEFAULT '',
+     price_cents     INTEGER NOT NULL,
+     credits         INTEGER NOT NULL,
+     validity_days   INTEGER NOT NULL,
+     offers          TEXT NOT NULL DEFAULT '[]',
+     cover           TEXT NOT NULL DEFAULT '',
+     active          INTEGER NOT NULL DEFAULT 1,
+     sort            INTEGER NOT NULL DEFAULT 0,
+     created_at      TEXT NOT NULL,
+     updated_at      TEXT NOT NULL,
+     CHECK (price_cents >= 0),
+     CHECK (credits >= 1),
+     CHECK (validity_days >= 1)
+   )`,
+  `CREATE TABLE IF NOT EXISTS member_passes (
+     id                    TEXT PRIMARY KEY,
+     code                  TEXT NOT NULL UNIQUE,
+     plan_id               TEXT,
+     name_nl               TEXT NOT NULL,
+     name_en               TEXT NOT NULL DEFAULT '',
+     user_id               TEXT,
+     email                 TEXT NOT NULL,
+     buyer_name            TEXT NOT NULL DEFAULT '',
+     credits_total         INTEGER NOT NULL,
+     credits_used          INTEGER NOT NULL DEFAULT 0,
+     offers                TEXT NOT NULL DEFAULT '[]',
+     validity_days         INTEGER NOT NULL,
+     valid_until           TEXT,
+     amount_cents          INTEGER NOT NULL DEFAULT 0,
+     discount_cents        INTEGER NOT NULL DEFAULT 0,
+     coupon_id             TEXT,
+     lang                  TEXT NOT NULL DEFAULT 'nl',
+     source                TEXT NOT NULL DEFAULT 'web',
+     status                TEXT NOT NULL,
+     hold_until            TEXT,
+     stripe_checkout_id    TEXT,
+     stripe_payment_intent TEXT,
+     note                  TEXT NOT NULL DEFAULT '',
+     created_at            TEXT NOT NULL,
+     activated_at          TEXT,
+     CHECK (credits_used >= 0 AND credits_used <= credits_total),
+     CHECK (status IN ('pending','active','cancelled','expired')),
+     CHECK (source IN ('web','manual'))
+   )`,
+  `CREATE INDEX IF NOT EXISTS passes_email ON member_passes (email, status)`,
+  `CREATE INDEX IF NOT EXISTS passes_user ON member_passes (user_id, status)`,
+  `CREATE INDEX IF NOT EXISTS passes_checkout ON member_passes (stripe_checkout_id)`,
+];
+
+/** Columns added after the first release. ALTER TABLE fails harmlessly when a column already exists. */
+const MIGRATIONS = [
+  `ALTER TABLE sessions ADD COLUMN image TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN offer TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN cover TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE bookings ADD COLUMN user_id TEXT`,
+  `ALTER TABLE bookings ADD COLUMN coupon_id TEXT`,
+  `ALTER TABLE bookings ADD COLUMN discount_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE bookings ADD COLUMN pass_id TEXT`,
+  `ALTER TABLE bookings ADD COLUMN credits_used INTEGER NOT NULL DEFAULT 0`,
+];
+const LATE_INDEXES = [
+  `CREATE INDEX IF NOT EXISTS bookings_coupon ON bookings (coupon_id, status)`,
+  `CREATE INDEX IF NOT EXISTS bookings_pass ON bookings (pass_id)`,
+  `CREATE INDEX IF NOT EXISTS bookings_email ON bookings (email)`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };
@@ -100,12 +188,14 @@ async function open(): Promise<Client> {
     client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN, intMode: "number" });
   }
   for (const statement of SCHEMA) await client.execute(statement);
-  // Migration for databases created before the `image` column existed.
-  try {
-    await client.execute(`ALTER TABLE sessions ADD COLUMN image TEXT NOT NULL DEFAULT ''`);
-  } catch {
-    /* column already exists */
+  for (const statement of MIGRATIONS) {
+    try {
+      await client.execute(statement);
+    } catch {
+      /* column already exists */
+    }
   }
+  for (const statement of LATE_INDEXES) await client.execute(statement);
   return client;
 }
 

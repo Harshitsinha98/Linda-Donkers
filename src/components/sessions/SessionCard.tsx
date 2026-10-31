@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useLang } from "../../i18n/LanguageContext";
-import { ROUTES, sm } from "../../data/site";
-import { fallbackImage, fmtEuro, fmtParts, type PublicSession } from "../../lib/api";
+import { ROUTES } from "../../data/site";
+import { fmtEuro, fmtParts, sessionImageSrc, type PublicSession } from "../../lib/api";
 import { Arrow } from "../Arrow";
 
 export function SessionCard({ s }: { s: PublicSession }) {
@@ -16,14 +16,20 @@ export function SessionCard({ s }: { s: PublicSession }) {
       className="group flex h-full flex-col overflow-hidden rounded-[1.6rem] border border-forest/10 bg-linen transition-[transform,box-shadow] duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-35px_rgba(46,58,47,0.45)]"
       data-cursor="hover"
     >
-      <div className="relative h-40 overflow-hidden">
-        <img
-          src={s.imageUrl || sm(fallbackImage(s))}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-[1.2s] group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-ink/55 to-transparent" />
+      <div className="relative aspect-[16/10] overflow-hidden">
+        {(() => {
+          const im = sessionImageSrc(s);
+          return (
+            <img
+              src={im.small}
+              alt=""
+              loading="lazy"
+              style={{ objectPosition: im.focus }}
+              className="h-full w-full object-cover transition-transform duration-[1.2s] group-hover:scale-105"
+            />
+          );
+        })()}
+        <div className="absolute inset-0 bg-gradient-to-t from-ink/60 via-transparent to-transparent" />
         <div className="absolute bottom-3 left-4 flex items-end gap-3 text-linen">
           <span className="font-display text-5xl font-light leading-none">{d.day}</span>
           <span className="pb-1 text-[0.7rem] font-bold uppercase leading-tight tracking-[0.2em]">

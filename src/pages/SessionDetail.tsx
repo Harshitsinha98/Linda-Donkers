@@ -7,6 +7,7 @@ import { Arrow } from "../components/Arrow";
 import { FadeUp } from "../components/Reveal";
 import { Button } from "../components/Magnetic";
 import { usePageTitle } from "../components/usePageTitle";
+import { authApi, useAuth } from "../lib/auth";
 
 const inputCls =
   "mt-2 w-full rounded-xl border border-forest/15 bg-cream/60 px-4 py-3 text-base text-ink outline-none transition-colors placeholder:text-forest/30 focus:border-saffron";
@@ -21,16 +22,71 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
+type Usable = { id: string; code: string; name: { nl: string; en: string }; creditsLeft: number };
+type Quote = { code: string; discountCents: number; totalCents: number };
+
 function BookingForm({ s }: { s: PublicSession }) {
   const { t, lang } = useLang();
   const b = t.booking;
+  const auth = useAuth();
   const navigate = useNavigate();
   const maxSeats = Math.max(1, Math.min(s.maxPerBooking, s.spotsLeft));
   const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", seats: 1, terms: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const total = s.priceCents * form.seats;
+
+  // Logged-in customers: prefill and load memberships that can pay for this session.
+  const [passes, setPasses] = useState<Usable[]>([]);
+  const [passId, setPassId] = useState("");
+  useEffect(() => {
+    if (!auth.session) {
+      setPasses([]);
+      setPassId("");
+      return;
+    }
+    setForm((f) => ({ ...f, email: f.email || auth.email, name: f.name || auth.name }));
+    authApi<{ usable?: Usable[] }>(auth.session, `/api/memberships?sessionId=${encodeURIComponent(s.id)}`)
+      .then((d) => {
+        const list = d.usable ?? [];
+        setPasses(list);
+        if (list.length) setPassId(list[0].id); // using credits is what members want by default
+      })
+      .catch(() => setPasses([]));
+  }, [auth.session, auth.email, auth.name, s.id]);
+  const pass = passes.find((p) => p.id === passId);
+  const seatLimit = pass ? Math.max(1, Math.min(maxSeats, pass.creditsLeft)) : maxSeats;
+
+  // Coupon
+  const [code, setCode] = useState("");
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [couponMsg, setCouponMsg] = useState("");
+  const [checking, setChecking] = useState(false);
+  const subtotal = s.priceCents * form.seats;
+  const total = pass ? 0 : quote ? quote.totalCents : subtotal;
+
+  const applyCoupon = async (value = code, seats = form.seats) => {
+    if (!value.trim()) return;
+    setChecking(true);
+    setCouponMsg("");
+    try {
+      const q = await api<Quote>("/api/coupon", {
+        method: "POST",
+        body: JSON.stringify({ code: value, sessionId: s.id, seats, email: form.email || undefined }),
+      });
+      setQuote(q);
+    } catch (err) {
+      setQuote(null);
+      const c = err instanceof ApiError ? err.code : "";
+      setCouponMsg(b.coupon.errors[c] ?? (c === "rate_limited" ? b.errors.rate : b.coupon.errors.coupon_invalid));
+    }
+    setChecking(false);
+  };
+  // The discount depends on the number of people: re-check when it changes.
+  useEffect(() => {
+    if (quote) void applyCoupon(quote.code, form.seats);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.seats]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,17 +96,19 @@ function BookingForm({ s }: { s: PublicSession }) {
     setError("");
     setBusy(true);
     try {
-      const res = await api<{ url?: string; ref?: string; token?: string }>("/api/checkout", {
+      const res = await authApi<{ url?: string; ref?: string; token?: string }>(auth.session, "/api/checkout", {
         method: "POST",
         body: JSON.stringify({
           sessionId: s.id,
           name: form.name,
-          email: form.email,
+          email: pass ? auth.email : form.email,
           phone: form.phone,
           note: form.note,
-          seats: form.seats,
+          seats: Math.min(form.seats, seatLimit),
           lang,
           acceptTerms: true,
+          couponCode: !pass && quote ? quote.code : "",
+          passId: pass?.id ?? "",
         }),
       });
       if (res.url) {
@@ -61,39 +119,77 @@ function BookingForm({ s }: { s: PublicSession }) {
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "";
       setError(
-        code === "full"
-          ? b.errors.full
-          : code === "unavailable"
-            ? b.errors.unavailable
-            : code === "payments_unavailable"
-              ? b.errors.payments
-              : code === "rate_limited"
-                ? b.errors.rate
-                : code === "invalid_input"
-                  ? b.errors.email
-                  : b.errors.generic,
+        b.coupon.errors[code] ??
+          b.pass.errors[code] ??
+          (code === "full"
+            ? b.errors.full
+            : code === "unavailable"
+              ? b.errors.unavailable
+              : code === "payments_unavailable"
+                ? b.errors.payments
+                : code === "rate_limited"
+                  ? b.errors.rate
+                  : code === "invalid_input"
+                    ? b.errors.email
+                    : b.errors.generic),
       );
       setBusy(false);
     }
   };
 
+  const next = `${window.location.pathname}${window.location.search}`;
+
   return (
     <form onSubmit={submit} noValidate className="rounded-[2rem] bg-linen p-6 shadow-[0_30px_80px_-40px_rgba(46,58,47,0.35)] sm:p-9">
       <h2 className="font-display text-3xl font-light text-ink">{b.formTitle}</h2>
       <div className="mt-7 grid gap-5">
+        {passes.length > 0 && (
+          <fieldset className="rounded-2xl border border-saffron/30 bg-saffron/5 p-4">
+            <legend className="px-1 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-saffron">{b.pass.title}</legend>
+            <div className="grid gap-2">
+              {passes.map((p) => (
+                <label key={p.id} className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-forest">
+                  <input type="radio" name="pay" checked={passId === p.id} onChange={() => setPassId(p.id)} className="h-4 w-4 accent-[var(--color-saffron)]" />
+                  {b.pass.use(p.name[lang], p.creditsLeft)}
+                </label>
+              ))}
+              <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-forest">
+                <input type="radio" name="pay" checked={!passId} onChange={() => setPassId("")} className="h-4 w-4 accent-[var(--color-saffron)]" />
+                {b.pass.money}
+              </label>
+            </div>
+          </fieldset>
+        )}
+        {auth.enabled && auth.ready && !auth.session && s.offer && (
+          <p className="rounded-2xl bg-sand/60 px-4 py-3 text-sm text-forest/80">
+            {b.pass.loginHint}{" "}
+            <Link to={`${ROUTES.account}?next=${encodeURIComponent(next)}`} className="font-semibold text-saffron underline underline-offset-4">
+              {b.pass.login}
+            </Link>
+          </p>
+        )}
+
         <Field label={b.name}>
           <input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} autoComplete="name" required />
         </Field>
-        <Field label={b.email}>
-          <input className={inputCls} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} autoComplete="email" required />
+        <Field label={b.email} hint={pass ? b.pass.loggedInAs(auth.email) : undefined}>
+          <input
+            className={`${inputCls} ${pass ? "opacity-60" : ""}`}
+            type="email"
+            value={pass ? auth.email : form.email}
+            readOnly={!!pass}
+            onChange={(e) => set("email", e.target.value)}
+            autoComplete="email"
+            required
+          />
         </Field>
         <Field label={b.phone} hint={b.phoneHint}>
           <input className={inputCls} type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} autoComplete="tel" placeholder="+32" required />
         </Field>
-        {maxSeats > 1 && (
+        {seatLimit > 1 && (
           <Field label={b.seats}>
-            <select className={inputCls} value={form.seats} onChange={(e) => set("seats", Number(e.target.value))}>
-              {Array.from({ length: maxSeats }, (_, i) => i + 1).map((n) => (
+            <select className={inputCls} value={Math.min(form.seats, seatLimit)} onChange={(e) => set("seats", Number(e.target.value))}>
+              {Array.from({ length: seatLimit }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>
@@ -104,6 +200,55 @@ function BookingForm({ s }: { s: PublicSession }) {
         <Field label={b.note}>
           <textarea className={`${inputCls} min-h-[90px] resize-y`} value={form.note} onChange={(e) => set("note", e.target.value)} />
         </Field>
+
+        {!pass && s.priceCents > 0 && (
+          <div>
+            <span className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{b.coupon.label}</span>
+            {quote ? (
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl bg-[#e8f3e4] px-4 py-3 text-sm font-semibold text-[#2f5d2a]">
+                <span>✓ {b.coupon.applied(quote.code)}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuote(null);
+                    setCode("");
+                  }}
+                  className="text-xs uppercase tracking-[0.14em] underline underline-offset-4"
+                >
+                  {b.coupon.remove}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-2 flex gap-2">
+                <input
+                  className={`${inputCls} mt-0 uppercase`}
+                  value={code}
+                  placeholder={b.coupon.placeholder}
+                  onChange={(e) => {
+                    setCode(e.target.value);
+                    setCouponMsg("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void applyCoupon();
+                    }
+                  }}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => applyCoupon()}
+                  disabled={checking || !code.trim()}
+                  className="shrink-0 rounded-xl border border-forest/20 px-4 text-sm font-semibold text-forest transition-colors hover:border-saffron hover:text-saffron disabled:opacity-50"
+                >
+                  {b.coupon.apply}
+                </button>
+              </div>
+            )}
+            {couponMsg && <p className="mt-2 text-sm text-[#a2470b]">{couponMsg}</p>}
+          </div>
+        )}
 
         <div className="rounded-2xl bg-sand/60 p-5 text-sm text-forest/80">
           <p className="font-bold text-forest">{b.policyTitle}</p>
@@ -118,9 +263,25 @@ function BookingForm({ s }: { s: PublicSession }) {
           </label>
         </div>
 
-        <div className="flex items-baseline justify-between border-t border-forest/10 pt-5">
-          <span className="text-sm font-bold uppercase tracking-[0.16em] text-sage">{b.total}</span>
-          <span className="font-display text-3xl text-ink">{total > 0 ? fmtEuro(total, lang) : t.agenda.free}</span>
+        <div className="border-t border-forest/10 pt-5">
+          {!pass && quote && quote.discountCents > 0 && (
+            <>
+              <div className="flex items-baseline justify-between text-sm text-forest/70">
+                <span>{b.coupon.subtotal}</span>
+                <span>{fmtEuro(subtotal, lang)}</span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between text-sm font-semibold text-[#2f5d2a]">
+                <span>{b.coupon.discount}</span>
+                <span>−{fmtEuro(quote.discountCents, lang)}</span>
+              </div>
+            </>
+          )}
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-sm font-bold uppercase tracking-[0.16em] text-sage">{b.total}</span>
+            <span className="font-display text-3xl text-ink">
+              {pass ? b.pass.credits(Math.min(form.seats, seatLimit)) : total > 0 ? fmtEuro(total, lang) : t.agenda.free}
+            </span>
+          </div>
         </div>
 
         {error && (
@@ -134,10 +295,10 @@ function BookingForm({ s }: { s: PublicSession }) {
           disabled={busy}
           className="inline-flex w-full items-center justify-center gap-3 rounded-full bg-saffron px-7 py-4 text-[0.85rem] font-bold uppercase tracking-[0.16em] text-linen transition-colors duration-300 hover:bg-forest disabled:opacity-60"
         >
-          {busy ? b.sending : total > 0 ? b.pay : b.confirmFree}
+          {busy ? b.sending : pass ? b.pass.confirm : total > 0 ? b.pay : b.confirmFree}
           {!busy && <Arrow className="h-4 w-4" />}
         </button>
-        {total > 0 && <p className="text-center text-xs text-forest/55">{b.payNote}</p>}
+        {!pass && total > 0 && <p className="text-center text-xs text-forest/55">{b.payNote}</p>}
       </div>
     </form>
   );
@@ -179,7 +340,10 @@ export default function SessionDetail() {
             <div className="lg:col-span-7">
               <FadeUp>
                 <div className="relative aspect-[16/9] overflow-hidden rounded-[2rem]">
-                  {(() => { const im = sessionImageSrc(s); return <img src={im.src} srcSet={im.srcSet} sizes="(min-width:1024px) 55vw, 100vw" alt="" className="h-full w-full object-cover" />; })()}
+                  {(() => {
+                    const im = sessionImageSrc(s);
+                    return <img src={im.src} srcSet={im.srcSet} sizes="(min-width:1024px) 55vw, 100vw" alt="" style={{ objectPosition: im.focus }} className="h-full w-full object-cover" />;
+                  })()}
                 </div>
                 <span className="eyebrow mt-10">{t.categories[s.category] ?? t.categories.other}</span>
                 <h1 className="mt-5 font-display text-[clamp(2.4rem,5vw,4.4rem)] font-light leading-[1.05] text-ink">{s.title[lang]}</h1>

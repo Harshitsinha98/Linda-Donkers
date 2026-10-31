@@ -52,6 +52,8 @@ export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking;
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={STATUS_TONE[b.status]}>{b.status === "pending" ? "awaiting payment" : b.status}</Badge>
           {b.source === "manual" && <Badge tone="blue">added by you</Badge>}
+          {b.passId && <Badge tone="green">membership · {b.creditsUsed} credit{b.creditsUsed === 1 ? "" : "s"}</Badge>}
+          {b.discountCents > 0 && <Badge tone="amber">coupon −{euro(b.discountCents)}</Badge>}
         </div>
       </div>
 
@@ -59,7 +61,7 @@ export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking;
         <span>
           Ref <strong>{b.ref}</strong>
         </span>
-        <span>{b.amountCents > 0 ? `Paid ${euro(b.amountCents)}${b.paidOnline ? "" : " (offline)"}` : "Free"}</span>
+        <span>{b.passId ? "Paid with membership" : b.amountCents > 0 ? `Paid ${euro(b.amountCents)}${b.paidOnline ? "" : " (offline)"}` : "Free"}</span>
         {b.refundedCents > 0 && <span>Refunded {euro(b.refundedCents)}</span>}
         <span>Booked {when(b.createdAt)}</span>
         {b.cancelledBy && <span>Cancelled by {b.cancelledBy === "admin" ? "you" : "customer"}</span>}

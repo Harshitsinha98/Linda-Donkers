@@ -59,6 +59,9 @@ export type AdminBooking = {
   cancelledBy: string | null;
   holdUntil: string | null;
   paidOnline: boolean;
+  discountCents: number;
+  passId: string | null;
+  creditsUsed: number;
 };
 
 export const CATEGORY_LABELS: Record<string, string> = {

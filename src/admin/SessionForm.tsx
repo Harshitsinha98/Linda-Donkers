@@ -3,6 +3,8 @@ import { ApiError } from "../lib/api";
 import { adminApi, CATEGORY_LABELS, type AdminSession } from "./adminApi";
 import { fileToDataUrl } from "./image";
 import { nextWeekday, TEMPLATES } from "./templates";
+import { COVERS, COVER_KEYS, coverFor, OFFER_KEYS, OFFERS } from "../../shared/catalog";
+import { sm } from "../data/site";
 import { Btn, ErrorNote, input, Label, Modal } from "./ui";
 
 /** Category picker groups. "online" is no longer a type: online is a checkbox on a yoga or healing session. */
@@ -30,6 +32,8 @@ type Form = {
   maxPerBooking: string;
   status: "published" | "draft";
   repeatWeeks: string;
+  offer: string;
+  cover: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -40,6 +44,7 @@ function fromSession(s?: AdminSession): Form {
       titleNl: "", titleEn: "", descriptionNl: "", descriptionEn: "", category: "yoga",
       venue: "", address: "", isOnline: false, onlineLink: "", date: today(), startTime: "19:00",
       durationMin: "90", capacity: "10", price: "", maxPerBooking: "4", status: "published", repeatWeeks: "0",
+      offer: "", cover: "",
     };
   }
   return {
@@ -49,6 +54,7 @@ function fromSession(s?: AdminSession): Form {
     date: s.date, startTime: s.startTime, durationMin: String(s.durationMin), capacity: String(s.capacity),
     price: s.priceCents ? (s.priceCents / 100).toFixed(2).replace(/\.00$/, "") : "0",
     maxPerBooking: String(s.maxPerBooking), status: s.status === "draft" ? "draft" : "published", repeatWeeks: "0",
+    offer: s.offer ?? "", cover: s.cover ?? "",
   };
 }
 
@@ -71,14 +77,25 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
     const tpl = TEMPLATES.find((x) => x.id === id);
     if (!tpl) return;
     setF((x) => {
-      const startTime = tpl.fields.startTime ?? x.startTime;
+      const startTime = tpl.startTime ?? x.startTime;
       return {
         ...x,
-        ...tpl.fields,
+        titleNl: tpl.titleNl,
+        titleEn: tpl.titleEn,
+        descriptionNl: tpl.descriptionNl,
+        descriptionEn: tpl.descriptionEn,
+        category: tpl.category,
+        isOnline: tpl.isOnline,
+        durationMin: String(tpl.durationMin),
+        price: String(tpl.priceCents / 100),
+        capacity: String(tpl.capacity),
+        maxPerBooking: String(tpl.maxPerBooking),
+        offer: tpl.offer,
+        cover: tpl.cover,
         startTime,
         date: tpl.weekday !== undefined ? nextWeekday(tpl.weekday, startTime) : x.date,
-        venue: tpl.fields.isOnline ? "" : x.venue,
-        address: tpl.fields.isOnline ? "" : x.address,
+        venue: tpl.isOnline ? "" : x.venue || "Deurne (Antwerpen)",
+        address: tpl.isOnline ? "" : x.address,
         // Weekly classes are usually planned as a series (12 weeks); massages and healings are one-off.
         repeatWeeks: tpl.weekday !== undefined ? "11" : "0",
       };
@@ -129,7 +146,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
       category: f.category, venue: f.isOnline ? "" : f.venue, address: f.isOnline ? "" : f.address,
       isOnline: f.isOnline, onlineLink: f.isOnline ? f.onlineLink : "", date: f.date, startTime: f.startTime,
       durationMin, capacity, priceCents, maxPerBooking: Math.min(maxPerBooking, capacity), status: f.status,
-      imageData, removeImage,
+      offer: f.offer, cover: f.cover, imageData, removeImage,
     };
     setBusy(true);
     setError("");
@@ -177,15 +194,45 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
           <input className={input} value={f.titleEn} onChange={(e) => set("titleEn", e.target.value)} placeholder="e.g. Kundalini Yoga & gong bath" />
         </Label>
 
+        <Label text="Session type" hint="Used for memberships and coupons, e.g. the 10-class card only covers group classes." >
+          <select className={input} value={f.offer} onChange={(e) => set("offer", e.target.value)}>
+            <option value="">Other / none</option>
+            {OFFER_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {OFFERS[k].en}
+              </option>
+            ))}
+          </select>
+        </Label>
+        <div />
+
         <div className="sm:col-span-2">
           <span className="text-xs font-bold uppercase tracking-[0.14em] text-forest/70">Photo</span>
-          <p className="mt-1 text-xs text-forest/50">A photo for this session, shown on the website. If you leave it empty, a default picture for the type is used.</p>
+          <p className="mt-1 text-xs text-forest/50">Pick one of your photos, or upload a new one. An uploaded photo is used first.</p>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+            {COVER_KEYS.map((k) => {
+              const auto = !f.cover && coverFor({ offer: f.offer, category: f.category }).src === COVERS[k].src;
+              const on = f.cover === k || auto;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => set("cover", f.cover === k ? "" : k)}
+                  title={COVERS[k].label}
+                  className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 transition ${on ? "border-saffron" : "border-transparent opacity-70 hover:opacity-100"}`}
+                >
+                  <img src={sm(COVERS[k].src)} alt={COVERS[k].label} loading="lazy" className="h-full w-full object-cover" style={{ objectPosition: COVERS[k].focus }} />
+                  {auto && <span className="absolute bottom-0 inset-x-0 bg-saffron/90 text-[0.6rem] font-bold uppercase text-white">default</span>}
+                </button>
+              );
+            })}
+          </div>
           <div className="mt-3 flex flex-wrap items-center gap-4">
             <div className="grid h-24 w-36 shrink-0 place-items-center overflow-hidden rounded-xl border border-forest/15 bg-cream">
               {preview ? (
                 <img src={preview} alt="Session preview" className="h-full w-full object-cover" />
               ) : (
-                <span className="px-2 text-center text-[0.7rem] text-forest/40">No photo (default is used)</span>
+                <span className="px-2 text-center text-[0.7rem] text-forest/40">No upload (photo above is used)</span>
               )}
             </div>
             <input
@@ -197,7 +244,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
             />
             <div className="flex flex-wrap gap-2">
               <Btn kind="ghost" onClick={() => fileRef.current?.click()}>
-                {preview ? "Change photo" : "Upload photo"}
+                {preview ? "Change upload" : "Upload photo"}
               </Btn>
               {preview && (
                 <Btn
@@ -208,7 +255,7 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
                     if (fileRef.current) fileRef.current.value = "";
                   }}
                 >
-                  Remove
+                  Remove upload
                 </Btn>
               )}
             </div>

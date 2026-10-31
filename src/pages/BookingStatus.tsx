@@ -146,7 +146,7 @@ export default function BookingStatus() {
                 {b.cancel.allowed && (
                   <div className="mt-8 rounded-[2rem] border border-forest/10 p-7 sm:p-9">
                     <h2 className="font-display text-2xl text-ink">{st.cancelTitle}</h2>
-                    <p className="mt-3 text-forest/75">{st.cancelInfo(b.cancel.percent, fmtEuro(b.cancel.cents, lang))}</p>
+                    <p className="mt-3 text-forest/75">{b.cancel.paidWithPass ? st.cancelInfoPass(b.cancel.creditsBack) : st.cancelInfo(b.cancel.percent, fmtEuro(b.cancel.cents, lang))}</p>
                     {error && <p className="mt-4 text-sm text-[#a2470b]">{error}</p>}
                     {!confirming ? (
                       <button type="button" onClick={() => setConfirming(true)} className="mt-6 text-sm font-semibold text-forest underline underline-offset-4 hover:text-saffron">

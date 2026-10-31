@@ -15,6 +15,7 @@ export function Footer() {
     { to: ROUTES.yoga, label: t.nav.yoga },
     { to: ROUTES.massage, label: t.nav.massage },
     { to: ROUTES.agenda, label: t.nav.agenda },
+    { to: ROUTES.memberships, label: t.nav.memberships },
     { to: ROUTES.travel, label: t.nav.travel },
     { to: ROUTES.gallery, label: t.nav.gallery },
     { to: ROUTES.contact, label: t.nav.contact },
