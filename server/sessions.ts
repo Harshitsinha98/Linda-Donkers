@@ -334,7 +334,7 @@ function relatedToOffering(row: SessionRow, offering: (typeof OFFERINGS)[number]
  */
 export async function syncMissingStandard(weeks: number, previewOnly: boolean) {
   const today = todayBE();
-  const rows = await all<SessionRow>(\`SELECT * FROM sessions\`, []);
+  const rows = await all<SessionRow>(`SELECT * FROM sessions`, []);
   const candidates: StandardSyncCandidate[] = [];
   const conflicts: StandardSyncConflict[] = [];
   const skipped: { offering: string; title: string; date: string; reason: string }[] = [];
