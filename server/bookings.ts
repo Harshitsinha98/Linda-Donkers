@@ -470,12 +470,22 @@ export const manualInput = z.object({
   seats: z.number().int().min(1).max(100),
   amountCents: z.number().int().min(0).max(10_000_000).default(0),
   sendEmail: z.boolean().default(false),
+  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(""),
+  appointmentTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default(""),
 });
 
 /** For bookings Linda takes herself (WhatsApp, cash, at the door). Still respects capacity. */
 export async function createManualBooking(input: z.infer<typeof manualInput>, base: string) {
   const s = await getSessionRow(input.sessionId);
   if (!s) throw new HttpError(404, "not_found");
+  const recurringAvailability = s.booking_mode === "appointment" ? parseAvailability(s.availability_rule) : null;
+  let appointmentSlot: { startsAt: string; endsAt: string } | null = null;
+  let preferred = "";
+  if (recurringAvailability) {
+    if (!input.appointmentDate || !input.appointmentTime) throw new HttpError(400, "slot_required");
+    appointmentSlot = await validateAppointmentSlot(s.id, input.appointmentDate, input.appointmentTime);
+    preferred = formatWhen(appointmentSlot.startsAt, "nl");
+  }
   const now = nowIso();
   const booking = {
     id: newId(),
@@ -498,12 +508,12 @@ export async function createManualBooking(input: z.infer<typeof manualInput>, ba
     discount_cents: 0,
     membership_id: null,
     user_id: "",
-    preferred: "",
-    appointment_start_at: null,
-    appointment_end_at: null,
+    preferred,
+    appointment_start_at: appointmentSlot?.startsAt ?? null,
+    appointment_end_at: appointmentSlot?.endsAt ?? null,
   };
   if ((await insertIfCapacity(booking)) === 0) {
-    throw new HttpError(409, "full", "Not enough places left (or the session is not published / already past). Increase the capacity first.");
+    throw new HttpError(409, appointmentSlot ? "slot_unavailable" : "full", appointmentSlot ? "That time has just been booked. Please choose another slot." : "Not enough places left (or the session is not published / already past). Increase the capacity first.");
   }
   if (input.sendEmail && input.email) await sendBookingConfirmed((await getBooking(booking.id))!, s, base, { notifyAdmin: false });
   return { ref: booking.ref };
