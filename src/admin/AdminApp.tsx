@@ -488,8 +488,8 @@ function SessionsTab() {
           <Btn kind="ghost" onClick={() => setSyncing(true)}>
             Add missing standard sessions
           </Btn>
-          <Btn kind="ghost" onClick={() => setResetting(true)}>
-            Reset to standard schedule
+          <Btn kind="danger" onClick={() => setResetting(true)}>
+            Destructive reset (delete unbooked sessions)
           </Btn>
           <Btn onClick={() => setEditing("new")}>+ New session</Btn>
         </div>
