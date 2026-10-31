@@ -24,6 +24,14 @@ export type PublicSession = {
   imageKey: string;
   offering: string;
   bookingMode: "scheduled" | "appointment";
+  availability: {
+    enabled: boolean;
+    startDate: string;
+    weekdays: number[];
+    intervalWeeks: number;
+    slotTimes: string[];
+    bufferMinutes: number;
+  } | null;
   section: Section | "other";
   status: "draft" | "published" | "cancelled";
 };
@@ -44,6 +52,7 @@ export type BookingView = {
   discountCents: number;
   paidWithMembership: boolean;
   preferred: string;
+  appointmentStartAt?: string | null;
 };
 
 export type MembershipPlan = {
