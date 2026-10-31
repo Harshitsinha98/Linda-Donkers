@@ -162,6 +162,9 @@ const MIGRATIONS = [
   `ALTER TABLE bookings ADD COLUMN membership_id TEXT`,
   `ALTER TABLE bookings ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE bookings ADD COLUMN preferred TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE sessions ADD COLUMN availability_rule TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE bookings ADD COLUMN appointment_start_at TEXT`,
+  `ALTER TABLE bookings ADD COLUMN appointment_end_at TEXT`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };

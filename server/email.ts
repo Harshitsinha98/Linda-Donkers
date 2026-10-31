@@ -199,9 +199,11 @@ export async function sendBookingConfirmed(
   const appt = s.booking_mode === "appointment";
   const details: [string, string][] = [
     [c.session, esc(title)],
-    appt
-      ? [c.when, `${esc(c.appointment)}${b.preferred ? `<br><span style="color:#8e9f84">${esc(c.preferred)}: ${esc(b.preferred)}</span>` : ""}<br><span style="color:#8e9f84">${esc(c.appointmentNote)}</span>`]
-      : [c.when, `${esc(formatWhen(s.starts_at, b.lang))} <span style="color:#8e9f84">(${c.timezone})</span>`],
+    appt && b.appointment_start_at
+      ? [c.when, esc(formatWhen(b.appointment_start_at, b.lang)) + ' <span style="color:#8e9f84">(' + c.timezone + ')</span>']
+      : appt
+        ? [c.when, esc(c.appointment) + (b.preferred ? '<br><span style="color:#8e9f84">' + esc(c.preferred) + ': ' + esc(b.preferred) + '</span>' : '') + '<br><span style="color:#8e9f84">' + esc(c.appointmentNote) + '</span>']
+        : [c.when, esc(formatWhen(s.starts_at, b.lang)) + ' <span style="color:#8e9f84">(' + c.timezone + ')</span>'],
     [c.duration, `${s.duration_min} ${c.min}`],
     [c.where, esc(place(s))],
     [c.seats, String(b.seats)],
@@ -226,7 +228,7 @@ ${button(waTo(WHATSAPP(), c.waText(b.ref)), c.whatsapp, "#25a244")}
 
   const adminDetails: [string, string][] = [
     ["Session", esc(s.title_nl)],
-    ["When", appt ? `By appointment · preferred: ${esc(b.preferred || "-")}` : esc(formatWhen(s.starts_at, "en"))],
+    ["When", b.appointment_start_at ? esc(formatWhen(b.appointment_start_at, "en")) : appt ? "By appointment · preferred: " + esc(b.preferred || "-") : esc(formatWhen(s.starts_at, "en"))],
     ["Name", esc(b.name)],
     ["Email", `<a href="mailto:${esc(b.email)}">${esc(b.email)}</a>`],
     ["Phone", esc(b.phone || "-")],
@@ -251,7 +253,7 @@ ${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`);
   if (b.email) tasks.push(send(b.email, c.confirmedSubject(title), customer, ADMIN_EMAIL()));
   if (notifyAdmin) {
     tasks.push(
-      send(ADMIN_EMAIL(), `New booking: ${b.name} · ${s.title_nl} · ${appt ? "by appointment" : formatWhen(s.starts_at, "en")}`, admin, b.email || undefined),
+      send(ADMIN_EMAIL(), "New booking: " + b.name + " · " + s.title_nl + " · " + (b.appointment_start_at ? formatWhen(b.appointment_start_at, "en") : appt ? "by appointment" : formatWhen(s.starts_at, "en")), admin, b.email || undefined),
     );
   }
   await Promise.all(tasks);
@@ -275,7 +277,7 @@ export async function sendBookingCancelled(
 <p style="font-size:15px;line-height:1.6;margin:0">${sessionCancelled ? c.sessionCancelledIntro : c.cancelledIntro}</p>
 ${rows([
   [c.session, esc(title)],
-  [c.when, esc(s.booking_mode === "appointment" ? c.appointment : formatWhen(s.starts_at, b.lang))],
+  [c.when, esc(b.appointment_start_at ? formatWhen(b.appointment_start_at, b.lang) : s.booking_mode === "appointment" ? c.appointment : formatWhen(s.starts_at, b.lang))],
   [c.ref, esc(b.ref)],
 ])}
 ${refundLine ? `<p style="font-size:15px;line-height:1.6">${refundLine}</p>` : ""}

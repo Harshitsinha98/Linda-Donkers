@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { adminApi, downloadCsv, euro, policyPercent, when, type AdminBooking, type AdminSession } from "./adminApi";
 import { Badge, Btn, ErrorNote, input, Label, Modal } from "./ui";
 
@@ -129,8 +129,27 @@ export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking;
 function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", seats: "1", amount: "", note: "", sendEmail: true });
+  const todayBE = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels" }).format(new Date());
+  const [slotDate, setSlotDate] = useState(() => session.availability?.startDate && session.availability.startDate > todayBE ? session.availability.startDate : todayBE);
+  const [slotTime, setSlotTime] = useState("");
+  const [slots, setSlots] = useState<{ time: string; startsAt: string; endsAt: string }[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open || !session.availability?.enabled || !slotDate) return;
+    let active = true;
+    setSlotsLoading(true);
+    setSlotTime("");
+    api<{ slots: { time: string; startsAt: string; endsAt: string }[] }>(
+      `/api/sessions?availabilityFor=${encodeURIComponent(session.id)}&date=${encodeURIComponent(slotDate)}`,
+    )
+      .then((d) => active && setSlots(d.slots))
+      .catch(() => active && setSlots([]))
+      .finally(() => active && setSlotsLoading(false));
+    return () => { active = false; };
+  }, [open, session.id, session.availability?.enabled, slotDate]);
 
   if (!open) {
     return (
@@ -141,6 +160,7 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
   }
   const save = async () => {
     if (!f.name.trim()) return setError("Name is required.");
+    if (session.availability?.enabled && (!slotDate || !slotTime)) return setError("Choose an available appointment date and time.");
     const amountCents = f.amount.trim() ? Math.round(Number(f.amount.replace(",", ".")) * 100) : 0;
     if (Number.isNaN(amountCents)) return setError("Amount must be a number.");
     setBusy(true);
@@ -150,7 +170,7 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
         method: "POST",
         body: JSON.stringify({
           action: "manual",
-          booking: { sessionId: session.id, name: f.name, email: f.email, phone: f.phone, seats: Number(f.seats) || 1, amountCents, note: f.note, sendEmail: f.sendEmail && !!f.email },
+          booking: { sessionId: session.id, name: f.name, email: f.email, phone: f.phone, seats: Number(f.seats) || 1, amountCents, note: f.note, sendEmail: f.sendEmail && !!f.email, appointmentDate: session.availability?.enabled ? slotDate : "", appointmentTime: session.availability?.enabled ? slotTime : "" },
         }),
       });
       setOpen(false);
@@ -166,6 +186,27 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
     <div className="rounded-2xl border border-forest/10 bg-white p-5">
       <p className="font-semibold text-ink">Add a booking (e.g. via WhatsApp or paid in cash)</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {session.availability?.enabled && (
+          <div className="rounded-xl bg-cream p-4 sm:col-span-2">
+            <Label text="Appointment date">
+              <input type="date" className={input} min={session.availability.startDate} max={session.date} value={slotDate} onChange={(e) => { setSlotDate(e.target.value); setSlotTime(""); }} />
+            </Label>
+            <p className="mt-2 text-xs text-forest/60">Weekdays: {session.availability.weekdays.map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}</p>
+            {slotsLoading ? (
+              <p className="mt-3 text-sm text-forest/60">Checking available slots…</p>
+            ) : slots.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {slots.map((slot) => (
+                  <button key={slot.time} type="button" aria-pressed={slotTime === slot.time} onClick={() => setSlotTime(slot.time)} className={"rounded-full border px-3 py-2 text-sm font-semibold " + (slotTime === slot.time ? "border-forest bg-forest text-white" : "border-forest/20 bg-white text-forest")}>
+                    {slot.time}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-forest/60">No available slots on this date.</p>
+            )}
+          </div>
+        )}
         <Label text="Name *">
           <input className={input} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         </Label>

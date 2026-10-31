@@ -24,7 +24,7 @@ export const GET = handler(async (req) => {
   const q = query(req);
   const sessionId = q.get("sessionId");
   const rows = await all<BookingRow & { title_nl: string; starts_at: string }>(
-    `SELECT b.*, s.title_nl, s.starts_at FROM bookings b JOIN sessions s ON s.id = b.session_id
+    `SELECT b.*, s.title_nl, COALESCE(b.appointment_start_at, s.starts_at) AS starts_at FROM bookings b JOIN sessions s ON s.id = b.session_id
      ${sessionId ? "WHERE b.session_id = ?" : "WHERE b.status <> 'expired'"}
      ORDER BY b.created_at DESC LIMIT 300`,
     sessionId ? [sessionId] : [],

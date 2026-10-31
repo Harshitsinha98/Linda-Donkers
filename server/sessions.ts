@@ -28,6 +28,7 @@ export type SessionRow = {
   image_key: string;
   offering: string;
   booking_mode: "scheduled" | "appointment";
+  availability_rule: string;
   status: "draft" | "published" | "cancelled";
   created_at: string;
   updated_at: string;
@@ -65,6 +66,7 @@ export function toPublic(row: SessionRow & { taken?: number }) {
     imageKey: row.image_key || "",
     offering: row.offering || "",
     bookingMode: row.booking_mode === "appointment" ? ("appointment" as const) : ("scheduled" as const),
+    availability: parseAvailability(row.availability_rule),
     section: sectionOf({ category: row.category, isOnline: !!row.is_online }),
     status: row.status,
   };
@@ -99,6 +101,56 @@ export async function listUpcomingPublic(limit: number, category?: string) {
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "use HH:MM");
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "use YYYY-MM-DD");
 
+const availabilitySchema = z.object({
+  enabled: z.boolean().default(false),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal("")).default(""),
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7).default([]),
+  intervalWeeks: z.number().int().min(1).max(52).default(1),
+  slotTimes: z.array(time).max(24).default([]),
+  bufferMinutes: z.number().int().min(0).max(180).default(0),
+});
+export type AvailabilityRule = z.infer<typeof availabilitySchema>;
+
+export const EMPTY_AVAILABILITY: AvailabilityRule = {
+  enabled: false, startDate: "", weekdays: [], intervalWeeks: 1, slotTimes: [], bufferMinutes: 0,
+};
+
+export function parseAvailability(raw: string | null | undefined): AvailabilityRule | null {
+  if (!raw) return null;
+  try {
+    const value = availabilitySchema.parse(JSON.parse(raw));
+    return value.enabled ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function weekdayOf(dateValue: string): number {
+  const [y, m, d] = dateValue.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+function mondayOf(dateValue: string): number {
+  const [y, m, d] = dateValue.split("-").map(Number);
+  const value = new Date(Date.UTC(y, m - 1, d));
+  value.setUTCDate(value.getUTCDate() - ((value.getUTCDay() + 6) % 7));
+  return value.getTime();
+}
+
+export function isRecurringDate(dateValue: string, endDate: string, rule: AvailabilityRule): boolean {
+  if (!rule.enabled || !rule.startDate || dateValue < rule.startDate || dateValue > endDate) return false;
+  if (!rule.weekdays.includes(weekdayOf(dateValue))) return false;
+  const weeks = Math.floor((mondayOf(dateValue) - mondayOf(rule.startDate)) / (7 * 86_400_000));
+  return weeks >= 0 && weeks % rule.intervalWeeks === 0;
+}
+
+export type AvailableAppointmentSlot = {
+  time: string;
+  startsAt: string;
+  endsAt: string;
+};
+
+
 export const sessionInput = z.object({
   titleNl: z.string().trim().min(1).max(120),
   titleEn: z.string().trim().max(120).default(""),
@@ -125,6 +177,39 @@ export const sessionInput = z.object({
   offering: z.string().trim().max(40).default(""),
   // "appointment": no fixed time; `date` is the last day it can be booked and the customer gives a preferred moment.
   bookingMode: z.enum(["scheduled", "appointment"]).default("scheduled"),
+  availability: availabilitySchema.default(EMPTY_AVAILABILITY),
+}).superRefine((value, ctx) => {
+  const rule = value.availability;
+  if (!rule.enabled) return;
+  if (value.bookingMode !== "appointment") {
+    ctx.addIssue({ code: "custom", path: ["availability"], message: "Weekly availability can only be used with appointment sessions." });
+  }
+  if (!rule.startDate || rule.startDate > value.date) {
+    ctx.addIssue({ code: "custom", path: ["availability", "startDate"], message: "The availability start date must be on or before the end date." });
+  }
+  if (rule.weekdays.length === 0 || new Set(rule.weekdays).size !== rule.weekdays.length) {
+    ctx.addIssue({ code: "custom", path: ["availability", "weekdays"], message: "Choose at least one unique weekday." });
+  }
+  if (rule.slotTimes.length === 0 || new Set(rule.slotTimes).size !== rule.slotTimes.length) {
+    ctx.addIssue({ code: "custom", path: ["availability", "slotTimes"], message: "Add at least one unique start time." });
+  }
+  const sorted = [...rule.slotTimes].sort();
+  const requiredGap = value.durationMin + rule.bufferMinutes;
+  for (const slot of sorted) {
+    const [hour, minute] = slot.split(":").map(Number);
+    if (hour * 60 + minute + requiredGap > 24 * 60) {
+      ctx.addIssue({ code: "custom", path: ["availability", "slotTimes"], message: "A slot plus its duration and buffer must finish before midnight." });
+      break;
+    }
+  }
+  for (let i = 1; i < sorted.length; i++) {
+    const [ah, am] = sorted[i - 1].split(":").map(Number);
+    const [bh, bm] = sorted[i].split(":").map(Number);
+    if ((bh * 60 + bm) - (ah * 60 + am) < requiredGap) {
+      ctx.addIssue({ code: "custom", path: ["availability", "slotTimes"], message: "Time slots overlap. Leave at least the session duration plus the buffer between start times." });
+      break;
+    }
+  }
 });
 export type SessionInput = z.infer<typeof sessionInput>;
 
@@ -184,6 +269,7 @@ function columns(input: SessionInput) {
     image_key: input.imageKey,
     offering: input.offering,
     booking_mode: input.bookingMode,
+    availability_rule: input.availability.enabled ? JSON.stringify(input.availability) : "",
   };
 }
 
@@ -220,6 +306,26 @@ export async function updateSession(id: string, input: SessionInput) {
   if (existing.status === "cancelled") throw new HttpError(409, "cancelled", "A cancelled session cannot be edited.");
   if (input.capacity < existing.taken) {
     throw new HttpError(409, "capacity_too_low", `${existing.taken} places are already booked. Capacity can't be lower than that.`);
+  }
+  const activeAppointmentCount = await get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM bookings WHERE session_id = ? AND appointment_start_at IS NOT NULL " +
+    "AND (status = 'confirmed' OR (status = 'pending' AND hold_until > ?))",
+    [id, nowIso()],
+  );
+  const previousRule = parseAvailability(existing.availability_rule);
+  const nextRule = input.availability.enabled ? input.availability : null;
+  const stable = (rule: AvailabilityRule | null, endDate: string, durationMin: number) => rule ? JSON.stringify({
+    enabled: rule.enabled,
+    endDate,
+    durationMin,
+    startDate: rule.startDate,
+    weekdays: [...rule.weekdays].sort((a, b) => a - b),
+    intervalWeeks: rule.intervalWeeks,
+    slotTimes: [...rule.slotTimes].sort(),
+    bufferMinutes: rule.bufferMinutes,
+  }) : "";
+  if ((activeAppointmentCount?.n ?? 0) > 0 && stable(previousRule, existing.date, existing.duration_min) !== stable(nextRule, input.date, input.durationMin)) {
+    throw new HttpError(409, "availability_has_bookings", "This recurring availability has active appointment bookings. Cancel or reschedule those bookings before changing its weekdays, slots, duration or end date.");
   }
   const base = columns(input);
   const cols: Record<string, string | number> =
@@ -269,6 +375,7 @@ export function rowToInput(row: SessionRow): SessionInput {
     imageKey: (PHOTO_KEYS as readonly string[]).includes(row.image_key) ? (row.image_key as SessionInput["imageKey"]) : "",
     offering: row.offering || "",
     bookingMode: row.booking_mode === "appointment" ? "appointment" : "scheduled",
+    availability: parseAvailability(row.availability_rule) ?? EMPTY_AVAILABILITY,
   };
 }
 
@@ -370,6 +477,7 @@ export async function syncMissingStandard(weeks: number, previewOnly: boolean) {
       imageKey: o.photo,
       offering: o.key,
       bookingMode: o.weekly ? "scheduled" : "appointment",
+      availability: EMPTY_AVAILABILITY,
     };
 
     const dates = o.weekly
@@ -468,6 +576,115 @@ function nextWeekdayDate(weekday: number, time: string): string {
 export const APPOINTMENT_TIME = "23:59";
 const IN_PERSON_VENUE = "Diamond Yoga · Deurne (Antwerpen)";
 
+type BusyInterval = { startsAt: number; endsAt: number };
+
+function intervalsOverlap(a: BusyInterval, b: BusyInterval): boolean {
+  return a.startsAt < b.endsAt && a.endsAt > b.startsAt;
+}
+
+/** Returns only configured weekly slots that are free across Linda's whole calendar. */
+export async function getAvailableAppointmentSlots(sessionId: string, dateValue: string): Promise<AvailableAppointmentSlot[]> {
+  const s = await getSessionRow(sessionId);
+  const rule = s ? parseAvailability(s.availability_rule) : null;
+  if (!s || s.status !== "published" || s.booking_mode !== "appointment" || !rule) {
+    throw new HttpError(409, "availability_not_configured");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue) || dateValue < todayBE() || !isRecurringDate(dateValue, s.date, rule)) {
+    return [];
+  }
+
+  const now = Date.now();
+  const candidates = rule.slotTimes.map((timeValue) => {
+    const start = zonedToUtc(dateValue, timeValue).getTime();
+    const end = start + s.duration_min * 60_000;
+    return {
+      time: timeValue,
+      startsAt: new Date(start).toISOString(),
+      endsAt: new Date(end).toISOString(),
+      busy: { startsAt: start, endsAt: end + rule.bufferMinutes * 60_000 },
+    };
+  }).filter((slot) => slot.busy.startsAt > now);
+
+  if (candidates.length === 0) return [];
+
+  const minStart = Math.min(...candidates.map((x) => x.busy.startsAt)) - 86_400_000;
+  const maxEnd = Math.max(...candidates.map((x) => x.busy.endsAt)) + 86_400_000;
+  const minIso = new Date(minStart).toISOString();
+  const maxIso = new Date(maxEnd).toISOString();
+
+  const [bookings, fixedSessions, otherRecurring] = await Promise.all([
+    all<{ appointment_start_at: string; appointment_end_at: string }>(
+      "SELECT appointment_start_at, appointment_end_at FROM bookings " +
+      "WHERE appointment_start_at IS NOT NULL AND appointment_end_at IS NOT NULL " +
+      "AND appointment_start_at < ? AND appointment_end_at > ? " +
+      "AND (status = 'confirmed' OR (status = 'pending' AND hold_until > ?))",
+      [maxIso, minIso, nowIso()],
+    ),
+    all<{ starts_at: string; duration_min: number }>(
+      "SELECT starts_at, duration_min FROM sessions " +
+      "WHERE id <> ? AND status = 'published' AND booking_mode = 'scheduled' " +
+      "AND starts_at < ? AND starts_at > ?",
+      [sessionId, maxIso, minIso],
+    ),
+    all<{
+      id: string;
+      date: string;
+      duration_min: number;
+      availability_rule: string;
+    }>(
+      "SELECT id, date, duration_min, availability_rule FROM sessions " +
+      "WHERE id <> ? AND status = 'published' AND booking_mode = 'appointment' AND availability_rule <> ''",
+      [sessionId],
+    ),
+  ]);
+
+  const bookingIntervals: BusyInterval[] = bookings.map((b) => ({
+    startsAt: Date.parse(b.appointment_start_at),
+    endsAt: Date.parse(b.appointment_end_at),
+  }));
+  const fixedIntervals: BusyInterval[] = fixedSessions.map((x) => {
+    const start = Date.parse(x.starts_at);
+    return { startsAt: start, endsAt: start + x.duration_min * 60_000 };
+  });
+  const recurringIntervals: BusyInterval[] = [];
+  for (const other of otherRecurring) {
+    const otherRule = parseAvailability(other.availability_rule);
+    if (!otherRule || !isRecurringDate(dateValue, other.date, otherRule)) continue;
+    for (const timeValue of otherRule.slotTimes) {
+      const start = zonedToUtc(dateValue, timeValue).getTime();
+      recurringIntervals.push({
+        startsAt: start,
+        endsAt: start + other.duration_min * 60_000 + otherRule.bufferMinutes * 60_000,
+      });
+    }
+  }
+
+  return candidates
+    .filter((slot) => {
+      const busy = slot.busy;
+      if (bookingIntervals.some((x) => intervalsOverlap(busy, x))) return false;
+      if (fixedIntervals.some((x) => intervalsOverlap(busy, x))) return false;
+      if (recurringIntervals.some((x) => intervalsOverlap(busy, x))) return false;
+      return true;
+    })
+    .map(({ time: timeValue, startsAt, endsAt }) => ({ time: timeValue, startsAt, endsAt }));
+}
+
+/** Re-checks a customer-selected slot immediately before checkout and returns canonical UTC times. */
+export async function validateAppointmentSlot(sessionId: string, dateValue: string, timeValue: string) {
+  const available = await getAvailableAppointmentSlots(sessionId, dateValue);
+  const slot = available.find((x) => x.time === timeValue);
+  if (!slot) throw new HttpError(409, "slot_unavailable", "That time is no longer available. Please choose another slot.");
+  const s = await getSessionRow(sessionId);
+  const rule = s ? parseAvailability(s.availability_rule) : null;
+  const bufferMinutes = rule?.bufferMinutes ?? 0;
+  return {
+    startsAt: slot.startsAt,
+    endsAt: new Date(Date.parse(slot.endsAt) + bufferMinutes * 60_000).toISOString(),
+  };
+}
+
+
 /**
  * Deletes every session that has no live booking (confirmed, or pending inside its payment window)
  * and creates Linda's standard offer: weekly classes for `weeks` weeks, and the massages /
@@ -517,6 +734,7 @@ export async function resetToStandard(weeks: number) {
       imageKey: o.photo,
       offering: o.key,
       bookingMode: "appointment",
+      availability: EMPTY_AVAILABILITY,
     };
     if (o.weekly) {
       const first = nextWeekdayDate(o.weekly.weekday, o.weekly.time);

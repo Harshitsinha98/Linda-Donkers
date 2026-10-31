@@ -36,11 +36,17 @@ type Form = {
   offering: string;
   imageKey: string;
   bookingMode: "scheduled" | "appointment";
+  availabilityEnabled: boolean;
+  availabilityStartDate: string;
+  availabilityWeekdays: number[];
+  availabilityIntervalWeeks: string;
+  availabilitySlotTimes: string;
+  availabilityBufferMinutes: string;
 };
 
 const APPOINTMENT_TIME = "23:59";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels" }).format(new Date());
 
 function fromSession(s?: AdminSession): Form {
   if (!s) {
@@ -49,6 +55,8 @@ function fromSession(s?: AdminSession): Form {
       venue: "", address: "", isOnline: false, onlineLink: "", date: today(), startTime: "19:00",
       durationMin: "90", capacity: "10", price: "", maxPerBooking: "4", status: "published", repeatWeeks: "0",
       offering: "", imageKey: "", bookingMode: "scheduled",
+      availabilityEnabled: false, availabilityStartDate: today(), availabilityWeekdays: [],
+      availabilityIntervalWeeks: "1", availabilitySlotTimes: "09:00, 11:00, 13:00", availabilityBufferMinutes: "15",
     };
   }
   return {
@@ -59,6 +67,12 @@ function fromSession(s?: AdminSession): Form {
     price: s.priceCents ? (s.priceCents / 100).toFixed(2).replace(/\.00$/, "") : "0",
     maxPerBooking: String(s.maxPerBooking), status: s.status === "draft" ? "draft" : "published", repeatWeeks: "0",
     offering: s.offering ?? "", imageKey: s.imageKey ?? "", bookingMode: s.bookingMode === "appointment" ? "appointment" : "scheduled",
+    availabilityEnabled: !!s.availability?.enabled,
+    availabilityStartDate: s.availability?.startDate || today(),
+    availabilityWeekdays: s.availability?.weekdays ?? [],
+    availabilityIntervalWeeks: String(s.availability?.intervalWeeks ?? 1),
+    availabilitySlotTimes: (s.availability?.slotTimes ?? ["09:00", "11:00", "13:00"]).join(", "),
+    availabilityBufferMinutes: String(s.availability?.bufferMinutes ?? 15),
   };
 }
 
@@ -136,12 +150,44 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
       return setError(appt ? "The 'bookable until' date is in the past." : "This date and time is in the past.");
     }
 
+    const slotTimes = f.availabilitySlotTimes.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+    const intervalWeeks = Number(f.availabilityIntervalWeeks);
+    const bufferMinutes = Number(f.availabilityBufferMinutes);
+    const availability = f.availabilityEnabled
+      ? {
+          enabled: true,
+          startDate: f.availabilityStartDate,
+          weekdays: [...new Set(f.availabilityWeekdays)].sort((a, b) => a - b),
+          intervalWeeks,
+          slotTimes: [...new Set(slotTimes)].sort(),
+          bufferMinutes,
+        }
+      : { enabled: false, startDate: "", weekdays: [], intervalWeeks: 1, slotTimes: [], bufferMinutes: 0 };
+    if (f.availabilityEnabled) {
+      if (!appt) return setError("Weekly availability is only available for appointment sessions.");
+      if (!f.availabilityStartDate || f.availabilityStartDate > f.date) return setError("The availability start date must be on or before the last bookable date.");
+      if (availability.weekdays.length === 0) return setError("Select at least one weekday.");
+      if (!(intervalWeeks >= 1 && intervalWeeks <= 52 && Number.isInteger(intervalWeeks))) return setError("Repeat frequency must be between 1 and 52 weeks.");
+      if (slotTimes.length === 0 || availability.slotTimes.length !== slotTimes.length) return setError("Add unique slot start times, separated by commas.");
+      if (slotTimes.some((x) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(x))) return setError("Use 24-hour time, for example 09:00, 11:00, 13:30.");
+      if (!(bufferMinutes >= 0 && bufferMinutes <= 180 && Number.isInteger(bufferMinutes))) return setError("Buffer must be between 0 and 180 minutes.");
+      const starts = availability.slotTimes.map((x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3)));
+      if (starts.some((start) => start + durationMin + bufferMinutes > 24 * 60)) {
+        return setError("Each slot plus its duration and buffer must finish before midnight.");
+      }
+      for (let i = 1; i < starts.length; i++) {
+        if (starts[i] - starts[i - 1] < durationMin + bufferMinutes) {
+          return setError("These slots overlap. Leave at least the session duration plus buffer between start times.");
+        }
+      }
+    }
+
     const payload = {
       titleNl: f.titleNl, titleEn: f.titleEn, descriptionNl: f.descriptionNl, descriptionEn: f.descriptionEn,
       category: f.category, venue: f.isOnline ? "" : f.venue, address: f.isOnline ? "" : f.address,
       isOnline: f.isOnline, onlineLink: f.isOnline ? f.onlineLink : "", date: f.date, startTime,
       durationMin, capacity, priceCents, maxPerBooking: Math.min(maxPerBooking, capacity), status: f.status,
-      imageData, removeImage, imageKey: f.imageKey, offering: f.offering, bookingMode: f.bookingMode,
+      imageData, removeImage, imageKey: f.imageKey, offering: f.offering, bookingMode: f.bookingMode, availability,
     };
     setBusy(true);
     setError("");
@@ -272,9 +318,65 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
             <option value="appointment">By appointment: the customer pays and gives a preferred moment, you confirm it (massages, healings)</option>
           </select>
         </Label>
-        <Label text={f.bookingMode === "appointment" ? "Bookable until" : "Date"} hint={f.bookingMode === "appointment" ? "After this day it disappears from the website." : undefined}>
+        <Label text={f.bookingMode === "appointment" ? "Last bookable date" : "Date"} hint={f.bookingMode === "appointment" ? "No appointment can be booked after this date." : undefined}>
           <input type="date" className={input} value={f.date} onChange={(e) => set("date", e.target.value)} />
         </Label>
+        {f.bookingMode === "appointment" && (
+          <div className="sm:col-span-2 rounded-2xl border border-forest/10 bg-cream p-4">
+            <label className="flex cursor-pointer items-start gap-3 text-sm font-semibold text-forest">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 accent-[var(--color-saffron)]"
+                checked={f.availabilityEnabled}
+                onChange={(e) => set("availabilityEnabled", e.target.checked)}
+              />
+              <span>
+                Offer recurring weekly appointment slots
+                <span className="mt-1 block text-xs font-normal text-forest/60">Customers choose an actual date and time. Only the selected weekdays and slots are bookable.</span>
+              </span>
+            </label>
+            {f.availabilityEnabled && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Label text="Availability starts on">
+                  <input type="date" className={input} value={f.availabilityStartDate} min={today()} max={f.date} onChange={(e) => set("availabilityStartDate", e.target.value)} />
+                </Label>
+                <Label text="Repeat every (weeks)" hint="1 = every week, 2 = every other week.">
+                  <input type="number" min={1} max={52} className={input} value={f.availabilityIntervalWeeks} onChange={(e) => set("availabilityIntervalWeeks", e.target.value)} />
+                </Label>
+                <div className="sm:col-span-2">
+                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-forest/70">Available weekdays *</span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      [1, "Monday"], [2, "Tuesday"], [3, "Wednesday"], [4, "Thursday"],
+                      [5, "Friday"], [6, "Saturday"], [0, "Sunday"],
+                    ].map(([day, label]) => (
+                      <label key={day} className="flex cursor-pointer items-center gap-2 rounded-full border border-forest/15 bg-white px-3 py-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-[var(--color-saffron)]"
+                          checked={f.availabilityWeekdays.includes(Number(day))}
+                          onChange={(e) => set("availabilityWeekdays", e.target.checked
+                            ? [...f.availabilityWeekdays, Number(day)]
+                            : f.availabilityWeekdays.filter((x) => x !== Number(day)))}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <Label text="Daily slot start times *" hint="Comma-separated 24-hour times, e.g. 09:00, 11:00, 14:00." >
+                  <textarea className={input + " min-h-[90px]"} value={f.availabilitySlotTimes} onChange={(e) => set("availabilitySlotTimes", e.target.value)} />
+                </Label>
+                <Label text="Buffer between sessions (minutes)" hint="Added after each appointment to prevent back-to-back overlaps.">
+                  <input type="number" min={0} max={180} className={input} value={f.availabilityBufferMinutes} onChange={(e) => set("availabilityBufferMinutes", e.target.value)} />
+                </Label>
+                <p className="sm:col-span-2 rounded-xl bg-white px-4 py-3 text-xs leading-relaxed text-forest/65">
+                  Duration is {f.durationMin || "—"} minutes. The system checks that daily slots do not overlap, blocks other booked or scheduled sessions, and rejects all dates outside the start/end range.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4">
           {f.bookingMode === "scheduled" ? (
             <Label text="Start time" hint="Belgian time">
