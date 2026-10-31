@@ -166,7 +166,7 @@ export default function Massage() {
                             </Link>
                           ) : (
                             <a
-                              href={waLink(`undefined ${tr.name}`)}
+                              href={waLink(m.packageText + " " + tr.name)}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold uppercase tracking-[0.14em] text-saffron underline-offset-4 hover:underline"
