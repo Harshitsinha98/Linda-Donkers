@@ -172,6 +172,9 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
       if (slotTimes.some((x) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(x))) return setError("Use 24-hour time, for example 09:00, 11:00, 13:30.");
       if (!(bufferMinutes >= 0 && bufferMinutes <= 180 && Number.isInteger(bufferMinutes))) return setError("Buffer must be between 0 and 180 minutes.");
       const starts = availability.slotTimes.map((x) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3)));
+      if (starts.some((start) => start + durationMin + bufferMinutes > 24 * 60)) {
+        return setError("Each slot plus its duration and buffer must finish before midnight.");
+      }
       for (let i = 1; i < starts.length; i++) {
         if (starts[i] - starts[i - 1] < durationMin + bufferMinutes) {
           return setError("These slots overlap. Leave at least the session duration plus buffer between start times.");
