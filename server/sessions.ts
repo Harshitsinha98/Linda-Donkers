@@ -586,7 +586,7 @@ function sameCalendarService(
   base: { offering: string; category: string; title_nl: string; title_en: string },
   other: { offering: string; category: string; title_nl: string; title_en: string },
 ): boolean {
-  if (base.offering && other.offering) return base.offering === other.offering;
+  if (base.offering && other.offering && base.offering === other.offering) return true;
   if (base.category !== other.category) return false;
   const baseTitles = [base.title_nl, base.title_en].filter(Boolean).map(normalizedSessionTitle);
   const otherTitles = [other.title_nl, other.title_en].filter(Boolean).map(normalizedSessionTitle);
