@@ -11,6 +11,7 @@ import {
   rowToInput,
   sessionInput,
   updateSession,
+  syncMissingStandard,
 } from "../../server/sessions.js";
 
 /** GET /api/admin/sessions?scope=upcoming|past */
@@ -25,11 +26,13 @@ const postBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("duplicate"), id: z.string().min(1) }),
   z.object({ action: z.literal("cancel"), id: z.string().min(1) }),
   z.object({ action: z.literal("publish"), id: z.string().min(1), publish: z.boolean() }),
+  z.object({ action: z.literal("previewStandard"), weeks: z.number().int().min(1).max(26).default(8) }),
+  z.object({ action: z.literal("createMissingStandard"), weeks: z.number().int().min(1).max(26).default(8) }),
   // Deletes all sessions without live bookings and creates Linda's standard schedule.
   z.object({ action: z.literal("reset"), weeks: z.number().int().min(1).max(26).default(8), confirm: z.literal("RESET") }),
 ]);
 
-/** POST /api/admin/sessions { action: create | duplicate | cancel | publish | reset } */
+/** POST /api/admin/sessions: create | duplicate | cancel | publish | previewStandard | createMissingStandard | reset */
 export const POST = handler(async (req) => {
   requireAdmin(req);
   const body = await readBody(req, postBody);
@@ -50,6 +53,10 @@ export const POST = handler(async (req) => {
     }
     case "cancel":
       return json({ ok: true, ...(await cancelSession(body.id, siteUrl(req))) });
+    case "previewStandard":
+      return json({ ok: true, ...(await syncMissingStandard(body.weeks, true)) });
+    case "createMissingStandard":
+      return json({ ok: true, ...(await syncMissingStandard(body.weeks, false)) });
     case "reset": {
       const result = await resetToStandard(body.weeks);
       const plansCreated = await seedDefaultPlans();
