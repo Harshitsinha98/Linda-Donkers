@@ -549,6 +549,114 @@ function nextWeekdayDate(weekday: number, time: string): string {
 export const APPOINTMENT_TIME = "23:59";
 const IN_PERSON_VENUE = "Diamond Yoga · Deurne (Antwerpen)";
 
+type BusyInterval = { startsAt: number; endsAt: number };
+
+function intervalsOverlap(a: BusyInterval, b: BusyInterval): boolean {
+  return a.startsAt < b.endsAt && a.endsAt > b.startsAt;
+}
+
+/** Returns only configured weekly slots that are free across Linda's whole calendar. */
+export async function getAvailableAppointmentSlots(sessionId: string, dateValue: string): Promise<AvailableAppointmentSlot[]> {
+  const s = await getSessionRow(sessionId);
+  const rule = s ? parseAvailability(s.availability_rule) : null;
+  if (!s || s.status !== "published" || s.booking_mode !== "appointment" || !rule) {
+    throw new HttpError(409, "availability_not_configured");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue) || dateValue < todayBE() || !isRecurringDate(dateValue, s.date, rule)) {
+    return [];
+  }
+
+  const now = Date.now();
+  const candidates = rule.slotTimes.map((timeValue) => {
+    const start = zonedToUtc(dateValue, timeValue).getTime();
+    const end = start + s.duration_min * 60_000;
+    return {
+      time: timeValue,
+      startsAt: new Date(start).toISOString(),
+      endsAt: new Date(end).toISOString(),
+      busy: { startsAt: start, endsAt: end + rule.bufferMinutes * 60_000 },
+    };
+  }).filter((slot) => slot.busy.startsAt > now);
+
+  if (candidates.length === 0) return [];
+
+  const minStart = Math.min(...candidates.map((x) => x.busy.startsAt)) - 86_400_000;
+  const maxEnd = Math.max(...candidates.map((x) => x.busy.endsAt)) + 86_400_000;
+  const minIso = new Date(minStart).toISOString();
+  const maxIso = new Date(maxEnd).toISOString();
+
+  const [bookings, fixedSessions, otherRecurring] = await Promise.all([
+    all<{ appointment_start_at: string; appointment_end_at: string }>(
+      "SELECT appointment_start_at, appointment_end_at FROM bookings " +
+      "WHERE appointment_start_at IS NOT NULL AND appointment_end_at IS NOT NULL " +
+      "AND (status = 'confirmed' OR (status = 'pending' AND hold_until > ?))",
+      [nowIso()],
+    ),
+    all<{ starts_at: string; duration_min: number }>(
+      "SELECT starts_at, duration_min FROM sessions " +
+      "WHERE id <> ? AND status = 'published' AND booking_mode = 'scheduled' " +
+      "AND starts_at < ? AND datetime(starts_at, '+' || duration_min || ' minutes') > ?",
+      [sessionId, maxIso, minIso],
+    ),
+    all<{
+      id: string;
+      date: string;
+      duration_min: number;
+      availability_rule: string;
+    }>(
+      "SELECT id, date, duration_min, availability_rule FROM sessions " +
+      "WHERE id <> ? AND status = 'published' AND booking_mode = 'appointment' AND availability_rule <> ''",
+      [sessionId],
+    ),
+  ]);
+
+  const bookingIntervals: BusyInterval[] = bookings.map((b) => ({
+    startsAt: Date.parse(b.appointment_start_at),
+    endsAt: Date.parse(b.appointment_end_at),
+  }));
+  const fixedIntervals: BusyInterval[] = fixedSessions.map((x) => {
+    const start = Date.parse(x.starts_at);
+    return { startsAt: start, endsAt: start + x.duration_min * 60_000 };
+  });
+  const recurringIntervals: BusyInterval[] = [];
+  for (const other of otherRecurring) {
+    const otherRule = parseAvailability(other.availability_rule);
+    if (!otherRule || !isRecurringDate(dateValue, other.date, otherRule)) continue;
+    for (const timeValue of otherRule.slotTimes) {
+      const start = zonedToUtc(dateValue, timeValue).getTime();
+      recurringIntervals.push({
+        startsAt: start,
+        endsAt: start + other.duration_min * 60_000 + otherRule.bufferMinutes * 60_000,
+      });
+    }
+  }
+
+  return candidates
+    .filter((slot) => {
+      const busy = slot.busy;
+      if (bookingIntervals.some((x) => intervalsOverlap(busy, x))) return false;
+      if (fixedIntervals.some((x) => intervalsOverlap(busy, x))) return false;
+      if (recurringIntervals.some((x) => intervalsOverlap(busy, x))) return false;
+      return true;
+    })
+    .map(({ time: timeValue, startsAt, endsAt }) => ({ time: timeValue, startsAt, endsAt }));
+}
+
+/** Re-checks a customer-selected slot immediately before checkout and returns canonical UTC times. */
+export async function validateAppointmentSlot(sessionId: string, dateValue: string, timeValue: string) {
+  const available = await getAvailableAppointmentSlots(sessionId, dateValue);
+  const slot = available.find((x) => x.time === timeValue);
+  if (!slot) throw new HttpError(409, "slot_unavailable", "That time is no longer available. Please choose another slot.");
+  const s = await getSessionRow(sessionId);
+  const rule = s ? parseAvailability(s.availability_rule) : null;
+  const bufferMinutes = rule?.bufferMinutes ?? 0;
+  return {
+    startsAt: slot.startsAt,
+    endsAt: new Date(Date.parse(slot.endsAt) + bufferMinutes * 60_000).toISOString(),
+  };
+}
+
+
 /**
  * Deletes every session that has no live booking (confirmed, or pending inside its payment window)
  * and creates Linda's standard offer: weekly classes for `weeks` weeks, and the massages /
@@ -598,6 +706,7 @@ export async function resetToStandard(weeks: number) {
       imageKey: o.photo,
       offering: o.key,
       bookingMode: "appointment",
+      availability: EMPTY_AVAILABILITY,
     };
     if (o.weekly) {
       const first = nextWeekdayDate(o.weekly.weekday, o.weekly.time);
