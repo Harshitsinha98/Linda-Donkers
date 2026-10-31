@@ -32,6 +32,13 @@ function BookingForm({ s }: { s: PublicSession }) {
   const appt = s.bookingMode === "appointment";
   const maxSeats = Math.max(1, Math.min(s.maxPerBooking, s.spotsLeft));
   const [form, setForm] = useState({ name: "", email: "", phone: "", note: "", preferred: "", seats: 1, terms: false });
+  const [appointmentDate, setAppointmentDate] = useState(() => {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels" }).format(new Date());
+    return s.availability?.startDate && s.availability.startDate > today ? s.availability.startDate : today;
+  });
+  const [appointmentTime, setAppointmentTime] = useState("");
+  const [availableSlots, setAvailableSlots] = useState<{ time: string; startsAt: string; endsAt: string }[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
@@ -57,6 +64,20 @@ function BookingForm({ s }: { s: PublicSession }) {
       .catch(() => setCards([]));
   }, [auth.email, auth.name, auth.authApi, s.id]);
 
+  useEffect(() => {
+    if (!appt || !s.availability?.enabled || !appointmentDate) return;
+    let active = true;
+    setSlotsLoading(true);
+    setAppointmentTime("");
+    api<{ slots: { time: string; startsAt: string; endsAt: string }[] }>(
+      `/api/sessions?availabilityFor=${encodeURIComponent(s.id)}&date=${encodeURIComponent(appointmentDate)}`,
+    )
+      .then((d) => active && setAvailableSlots(d.slots))
+      .catch(() => active && setAvailableSlots([]))
+      .finally(() => active && setSlotsLoading(false));
+    return () => { active = false; };
+  }, [appt, s.id, s.availability?.enabled, appointmentDate]);
+
   const useCard = !!cardId && cards.some((c) => c.id === cardId);
   const seats = useCard ? 1 : form.seats;
   const gross = s.priceCents * seats;
@@ -66,7 +87,8 @@ function BookingForm({ s }: { s: PublicSession }) {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || form.phone.trim().length < 6) return setError(b.errors.required);
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError(b.errors.email);
-    if (appt && form.preferred.trim().length < 3) return setError(b.errors.preferred);
+    if (appt && s.availability?.enabled && (!appointmentDate || !appointmentTime)) return setError("Please choose an available date and time.");
+    if (appt && !s.availability?.enabled && form.preferred.trim().length < 3) return setError(b.errors.preferred);
     if (!form.terms) return setError(b.errors.terms);
     setError("");
     setBusy(true);
@@ -79,7 +101,9 @@ function BookingForm({ s }: { s: PublicSession }) {
           email: form.email,
           phone: form.phone,
           note: form.note,
-          preferred: appt ? form.preferred : "",
+          preferred: appt && !s.availability?.enabled ? form.preferred : "",
+          appointmentDate: appt && s.availability?.enabled ? appointmentDate : "",
+          appointmentTime: appt && s.availability?.enabled ? appointmentTime : "",
           seats,
           lang,
           acceptTerms: true,
@@ -108,6 +132,8 @@ function BookingForm({ s }: { s: PublicSession }) {
                   ? b.errors.rate
                   : code === "preferred_required"
                     ? b.errors.preferred
+                    : code === "slot_required" || code === "slot_unavailable"
+                      ? "That slot is no longer available. Please choose another date and time."
                     : code === "membership_not_usable" || code === "membership_one_seat"
                       ? b.errors.membership
                       : code === "login_required"
@@ -179,11 +205,52 @@ function BookingForm({ s }: { s: PublicSession }) {
         <Field label={b.phone} hint={b.phoneHint}>
           <input className={inputCls} type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} autoComplete="tel" placeholder="+32" required />
         </Field>
-        {appt && (
+        {appt && s.availability?.enabled ? (
+          <>
+            <Field
+              label={lang === "en" ? "Choose a date" : "Kies een datum"}
+              hint={(lang === "en" ? "Available: " : "Beschikbaar: ") + s.availability.weekdays.map((d) => (lang === "en" ? ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] : ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"])[d]).join(", ") + (s.availability.intervalWeeks > 1 ? (lang === "en" ? " · every " : " · elke ") + s.availability.intervalWeeks + (lang === "en" ? " weeks" : " weken") : "")}
+            >
+              <input
+                className={inputCls}
+                type="date"
+                min={s.availability.startDate}
+                max={s.date}
+                value={appointmentDate}
+                onChange={(e) => { setAppointmentDate(e.target.value); setAppointmentTime(""); }}
+                required
+              />
+            </Field>
+            <div>
+              <span className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{lang === "en" ? "Available time slots" : "Beschikbare tijdsloten"}</span>
+              {slotsLoading ? (
+                <p className="mt-2 text-sm text-forest/60">{lang === "en" ? "Checking availability…" : "Beschikbaarheid controleren…"}</p>
+              ) : availableSlots.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={slot.time}
+                      type="button"
+                      aria-pressed={appointmentTime === slot.time}
+                      onClick={() => setAppointmentTime(slot.time)}
+                      className={"rounded-full border px-4 py-2.5 text-sm font-semibold transition-colors " + (appointmentTime === slot.time ? "border-forest bg-forest text-linen" : "border-forest/20 bg-cream text-forest hover:border-saffron")}
+                    >
+                      {slot.time}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 rounded-xl bg-sand/60 px-4 py-3 text-sm text-forest/70">
+                  {lang === "en" ? "No available slots on this date. Choose one of the listed weekdays or another date." : "Op deze datum zijn geen tijdsloten beschikbaar. Kies een beschikbare weekdag of een andere datum."}
+                </p>
+              )}
+            </div>
+          </>
+        ) : appt ? (
           <Field label={b.preferred} hint={b.preferredHint}>
             <input className={inputCls} value={form.preferred} onChange={(e) => set("preferred", e.target.value)} required />
           </Field>
-        )}
+        ) : null}
         {maxSeats > 1 && !useCard && (
           <Field label={b.seats}>
             <select
