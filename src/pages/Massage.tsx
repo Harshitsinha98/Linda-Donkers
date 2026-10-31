@@ -45,31 +45,35 @@ const TREATMENT_OFFERINGS: Record<string, string[]> = {
   satnam: ["satnam-live", "satnam-online"],
 };
 
-function matchesTreatment(s: PublicSession, key: string): boolean {
-  if (key === "satnam") {
-    return s.offering === "satnam-live" || s.offering === "satnam-online" ||
-      /sat.?nam|rasayan/i.test(s.title.nl + " " + s.title.en);
-  }
-  if (s.offering === key) return true;
+function titleMatchesOffering(s: PublicSession, key: string): boolean {
   const title = (s.title.nl + " " + s.title.en)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+
   if (key === "mer") return /m\.?e\.?r\b|myo fascia|fascia energetic/i.test(title);
   if (key === "lomi") return /lomi lomi nui/i.test(title);
   if (key === "chinei") return /chi nei tsang|taoistic.*belly|taoistische.*buik/i.test(title);
+  if (key === "satnam-live") return !s.isOnline && /sat.?nam|rasayan/i.test(title);
+  if (key === "satnam-online") return s.isOnline && /sat.?nam|rasayan/i.test(title);
   return false;
 }
 
+/** Return one direct Agenda booking link per treatment offering, not one for every weekly occurrence. */
 function sessionsForTreatment(list: PublicSession[] | null, key: string): PublicSession[] {
   if (!list) return [];
-  const matching = list.filter((s) => s.status === "published" && matchesTreatment(s, key));
-  const exact = matching.filter((s) => (TREATMENT_OFFERINGS[key] ?? []).includes(s.offering));
-  const pool = exact.length ? exact : matching;
-  return pool.sort((a, b) => {
-    const mode = Number(b.bookingMode === "appointment") - Number(a.bookingMode === "appointment");
-    return mode || Date.parse(a.startsAt) - Date.parse(b.startsAt);
-  });
+  const offerings = TREATMENT_OFFERINGS[key] ?? [];
+  return offerings
+    .map((offering) => {
+      const exact = list.filter((s) => s.status === "published" && s.offering === offering);
+      const fallback = list.filter((s) => s.status === "published" && !s.offering && titleMatchesOffering(s, offering));
+      const candidates = exact.length ? exact : fallback;
+      return candidates.sort((a, b) => {
+        const mode = Number(b.bookingMode === "appointment") - Number(a.bookingMode === "appointment");
+        return mode || Date.parse(a.startsAt) - Date.parse(b.startsAt);
+      })[0];
+    })
+    .filter((s): s is PublicSession => !!s);
 }
 
 export default function Massage() {
