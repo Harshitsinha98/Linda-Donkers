@@ -1,8 +1,9 @@
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext";
+import { Link } from "react-router-dom";
 import { IMG, ROUTES, sm, waLink } from "../data/site";
-import { useSessions, type PublicSession } from "../lib/api";
+import { api, useSessions, type MembershipPlan, type PublicSession } from "../lib/api";
 
 /** Linda's own photos per treatment. M.E.R. and Chi Nei Tsang reuse her massage photos until dedicated ones exist. */
 const TREATMENT_IMG: Record<string, string> = {
@@ -76,9 +77,23 @@ function sessionsForTreatment(list: PublicSession[] | null, key: string): Public
     .filter((s): s is PublicSession => !!s);
 }
 
+function membershipForTreatment(plans: MembershipPlan[] | null, key: string): MembershipPlan | null {
+  if (!plans || (key !== "mer" && key !== "lomi")) return null;
+  return plans.find((plan) => plan.status === "active" && plan.credits === 5 && plan.priceCents === 60000 && plan.scope.includes(key)) ?? null;
+}
+
 export default function Massage() {
   const { t, lang } = useLang();
   const { sessions: agendaSessions } = useSessions(200);
+  const [membershipPlans, setMembershipPlans] = useState<MembershipPlan[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api<{ plans: MembershipPlan[] }>("/api/memberships")
+      .then((data) => active && setMembershipPlans(data.plans))
+      .catch(() => active && setMembershipPlans([]));
+    return () => { active = false; };
+  }, []);
   const m = t.massage;
   usePageTitle(t.meta.massage);
 
@@ -140,14 +155,25 @@ export default function Massage() {
                       <div className="mt-auto pt-6">
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-sand/70 px-5 py-4">
                           <p className="text-sm font-semibold text-forest">{tr.package}</p>
-                          <a
-                            href={waLink(`${m.packageText} ${tr.name}`)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold uppercase tracking-[0.14em] text-saffron underline-offset-4 hover:underline"
-                          >
-                            {m.packageCta} <Arrow className="h-3.5 w-3.5" />
-                          </a>
+                          {membershipPlans === null ? (
+                            <span className="text-xs text-forest/50">{lang === "en" ? "Loading package…" : "Pakket laden…"}</span>
+                          ) : membershipForTreatment(membershipPlans, tr.key) ? (
+                            <Link
+                              to={ROUTES.memberships + "?plan=" + encodeURIComponent(membershipForTreatment(membershipPlans, tr.key)!.id)}
+                              className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold uppercase tracking-[0.14em] text-saffron underline-offset-4 transition-colors hover:text-forest hover:underline"
+                            >
+                              {m.packageCta} <Arrow className="h-3.5 w-3.5" />
+                            </Link>
+                          ) : (
+                            <a
+                              href={waLink(m.packageText + " " + tr.name)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 text-[0.72rem] font-bold uppercase tracking-[0.14em] text-saffron underline-offset-4 hover:underline"
+                            >
+                              {m.packageCta} <Arrow className="h-3.5 w-3.5" />
+                            </a>
+                          )}
                         </div>
                       </div>
                     )}
