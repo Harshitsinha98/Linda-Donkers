@@ -219,6 +219,7 @@ const MIGRATIONS = [
   `ALTER TABLE memberships ADD COLUMN gift_cents INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE memberships ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE memberships ADD COLUMN gift_refunded_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE gift_cards ADD COLUMN for_self INTEGER NOT NULL DEFAULT 0`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };

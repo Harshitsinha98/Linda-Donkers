@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+
+type ForWhom = "gift" | "self";
 import { useLang } from "../i18n/LanguageContext";
 import { IMG, ROUTES, sm } from "../data/site";
 import { api, ApiError, fmtDate, fmtEuro } from "../lib/api";
@@ -39,13 +41,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function BuyForm() {
+function BuyForm({ initialFor }: { initialFor: ForWhom }) {
   const { t, lang } = useLang();
   const g = t.gift;
   const auth = useAuth();
   const [amount, setAmount] = useState(10000);
   const [custom, setCustom] = useState("");
-  const [f, setF] = useState({ buyerName: auth.name, buyerEmail: auth.email, forSomeone: false, recipientName: "", recipientEmail: "", message: "", terms: false });
+  const [forWhom, setForWhom] = useState<ForWhom>(initialFor);
+  const forSomeone = forWhom === "gift";
+  const [f, setF] = useState({ buyerName: auth.name, buyerEmail: auth.email, recipientName: "", recipientEmail: "", message: "", terms: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
@@ -59,7 +63,7 @@ function BuyForm() {
     e.preventDefault();
     if (!valid) return setError(g.errorAmount);
     if (!f.buyerName.trim() || !/^\S+@\S+\.\S+$/.test(f.buyerEmail.trim())) return setError(g.errorRequired);
-    if (f.forSomeone && f.recipientEmail.trim() && !/^\S+@\S+\.\S+$/.test(f.recipientEmail.trim())) return setError(t.booking.errors.email);
+    if (forSomeone && f.recipientEmail.trim() && !/^\S+@\S+\.\S+$/.test(f.recipientEmail.trim())) return setError(t.booking.errors.email);
     if (!f.terms) return setError(t.booking.errors.terms);
     setBusy(true);
     setError("");
@@ -70,9 +74,10 @@ function BuyForm() {
           amountCents: cents,
           buyerName: f.buyerName,
           buyerEmail: f.buyerEmail,
-          recipientName: f.forSomeone ? f.recipientName : "",
-          recipientEmail: f.forSomeone ? f.recipientEmail : "",
-          message: f.forSomeone ? f.message : "",
+          forSelf: !forSomeone,
+          recipientName: forSomeone ? f.recipientName : "",
+          recipientEmail: forSomeone ? f.recipientEmail : "",
+          message: forSomeone ? f.message : "",
           lang,
           acceptTerms: true,
         }),
@@ -90,6 +95,28 @@ function BuyForm() {
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-5 rounded-[2rem] bg-linen p-6 shadow-[0_30px_80px_-40px_rgba(46,58,47,0.35)] sm:p-9">
+      <fieldset>
+        <legend className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{g.forWhom}</legend>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              ["gift", g.asGift, g.asGiftText],
+              ["self", g.forMe, g.forMeText],
+            ] as const
+          ).map(([k, title, text]) => (
+            <label
+              key={k}
+              className={`flex cursor-pointer gap-3 rounded-2xl border-2 p-4 transition-colors ${forWhom === k ? "border-saffron bg-saffron/5" : "border-forest/10 hover:border-forest/30"}`}
+            >
+              <input type="radio" name="forWhom" checked={forWhom === k} onChange={() => setForWhom(k)} className="mt-1 accent-[var(--color-saffron)]" />
+              <span>
+                <span className="block font-semibold text-ink">{title}</span>
+                <span className="mt-1 block text-sm text-forest/70">{text}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div>
         <span className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-sage">{g.amount}</span>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -112,18 +139,17 @@ function BuyForm() {
       <Field label={g.custom} hint={g.amountHint(MIN, MAX)}>
         <input className={inputCls} inputMode="decimal" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="75" />
       </Field>
+      <p className="-mb-2 font-display text-xl text-ink">{g.yourDetails}</p>
       <Field label={g.buyerName}>
         <input className={inputCls} value={f.buyerName} onChange={(e) => set("buyerName", e.target.value)} autoComplete="name" />
       </Field>
       <Field label={g.buyerEmail}>
         <input className={inputCls} type="email" value={f.buyerEmail} onChange={(e) => set("buyerEmail", e.target.value)} autoComplete="email" />
       </Field>
-      <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-forest">
-        <input type="checkbox" checked={f.forSomeone} onChange={(e) => set("forSomeone", e.target.checked)} className="h-5 w-5 accent-[var(--color-saffron)]" />
-        {g.forSomeone}
-      </label>
-      {f.forSomeone && (
+      {!forSomeone && <p className="-mt-2 text-xs text-forest/60">{g.forMeNote}</p>}
+      {forSomeone && (
         <>
+          <p className="-mb-2 font-display text-xl text-ink">{g.recipientDetails}</p>
           <Field label={g.recipientName}>
             <input className={inputCls} value={f.recipientName} onChange={(e) => set("recipientName", e.target.value)} />
           </Field>
@@ -230,6 +256,7 @@ export default function GiftCard() {
   const ref = params.get("ref") ?? "";
   const token = params.get("t") ?? "";
   const aborted = params.get("aborted") === "1";
+  const initialFor: ForWhom = params.get("for") === "me" ? "self" : "gift";
 
   return (
     <section className="relative pb-28 pt-32 sm:pb-40 sm:pt-44">
@@ -251,7 +278,7 @@ export default function GiftCard() {
         </div>
         <div className="lg:col-span-6">
           {aborted && <p className="mb-6 rounded-xl bg-saffron/10 px-4 py-3 text-sm text-[#a2470b]">{g.aborted}</p>}
-          {ref && token ? <StatusView ref_={ref} token={token} /> : <BuyForm />}
+          {ref && token ? <StatusView ref_={ref} token={token} /> : <BuyForm initialFor={initialFor} />}
         </div>
       </div>
     </section>

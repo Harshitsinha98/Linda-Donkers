@@ -398,7 +398,18 @@ ${button(`${base}/agenda`, en ? "Book a session" : "Boek een sessie", "#2e3a2f")
       ),
     );
   } else {
-    tasks.push(send(g.buyer_email, subject, card(g.buyer_name, en ? "Thank you! Here is your gift card. Pass the code on, or use it yourself." : "Dankjewel! Hier is je cadeaubon. Geef de code door, of gebruik hem zelf."), ADMIN_EMAIL()));
+    const intro = g.for_self
+      ? en
+        ? "Thank you! Here is your gift card. Log in on the website with this email address to see your balance in your account."
+        : "Dankjewel! Hier is je cadeaubon. Log in op de website met dit e-mailadres, dan zie je je saldo in je account."
+      : g.recipient_name
+        ? en
+          ? `Thank you! Here is the gift card for ${esc(g.recipient_name)}. Pass the code on, together with your wishes.`
+          : `Dankjewel! Hier is de cadeaubon voor ${esc(g.recipient_name)}. Geef de code door, samen met je wensen.`
+        : en
+          ? "Thank you! Here is your gift card. Pass the code on, or use it yourself."
+          : "Dankjewel! Hier is je cadeaubon. Geef de code door, of gebruik hem zelf.";
+    tasks.push(send(g.buyer_email, subject, card(g.buyer_name, intro), ADMIN_EMAIL()));
   }
   if (g.source === "web") {
     tasks.push(
@@ -410,7 +421,7 @@ ${rows([
   ["Value", amount],
   ["Code", esc(g.code)],
   ["Bought by", `${esc(g.buyer_name)} · ${esc(g.buyer_email)}`],
-  ["For", esc([g.recipient_name, g.recipient_email].filter(Boolean).join(" · ") || "-")],
+  ["For", g.for_self ? "Themselves" : esc([g.recipient_name, g.recipient_email].filter(Boolean).join(" · ") || "a present (buyer passes it on)")],
   ["Valid until", until],
   ["Reference", esc(g.ref)],
 ])}

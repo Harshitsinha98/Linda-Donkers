@@ -66,9 +66,9 @@ export function SocialIcons({ tone = "light", size = "md", className = "" }: { t
 /** Larger cards with the page name, for the "Follow Linda" section and the contact page. */
 export function SocialCards() {
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {SOCIALS.map((s) => (
-        <li key={s.href}>
+        <li key={s.href} className="min-w-0">
           <a
             href={s.href}
             target="_blank"
