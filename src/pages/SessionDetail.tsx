@@ -93,7 +93,7 @@ function BookingForm({ s }: { s: PublicSession }) {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || form.phone.trim().length < 6) return setError(b.errors.required);
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) return setError(b.errors.email);
-    if (appt && s.availability?.enabled && (!appointmentDate || !appointmentTime)) return setError("Please choose an available date and time.");
+    if (appt && s.availability?.enabled && (!appointmentDate || !appointmentTime)) return setError(b.errors.slotRequired);
     if (appt && !s.availability?.enabled && form.preferred.trim().length < 3) return setError(b.errors.preferred);
     if (!form.terms) return setError(b.errors.terms);
     setError("");
@@ -139,7 +139,7 @@ function BookingForm({ s }: { s: PublicSession }) {
                   : code === "preferred_required"
                     ? b.errors.preferred
                     : code === "slot_required" || code === "slot_unavailable"
-                      ? "That slot is no longer available. Please choose another date and time."
+                      ? b.errors.slotUnavailable
                     : code === "membership_not_usable" || code === "membership_one_seat"
                       ? b.errors.membership
                       : code === "login_required"

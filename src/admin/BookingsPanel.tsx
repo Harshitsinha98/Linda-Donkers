@@ -134,6 +134,7 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
   const [slotTime, setSlotTime] = useState("");
   const [slots, setSlots] = useState<{ time: string; startsAt: string; endsAt: string }[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -142,11 +143,22 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
     let active = true;
     setSlotsLoading(true);
     setSlotTime("");
+    setSlotsError("");
     api<{ slots: { time: string; startsAt: string; endsAt: string }[] }>(
       `/api/sessions?availabilityFor=${encodeURIComponent(session.id)}&date=${encodeURIComponent(slotDate)}`,
     )
       .then((d) => active && setSlots(d.slots))
-      .catch(() => active && setSlots([]))
+      .catch((err) => {
+        if (!active) return;
+        setSlots([]);
+        setSlotsError(
+          err instanceof ApiError && err.code === "availability_not_configured"
+            ? "Slots can't be loaded: publish this session and save its weekly availability first."
+            : err instanceof ApiError && err.message !== err.code
+              ? err.message
+              : "Could not load the available slots. Please try again.",
+        );
+      })
       .finally(() => active && setSlotsLoading(false));
     return () => { active = false; };
   }, [open, session.id, session.availability?.enabled, slotDate]);
@@ -194,6 +206,8 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
             <p className="mt-2 text-xs text-forest/60">Weekdays: {session.availability.weekdays.map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}</p>
             {slotsLoading ? (
               <p className="mt-3 text-sm text-forest/60">Checking available slots…</p>
+            ) : slotsError ? (
+              <p className="mt-3 text-sm text-red-700">{slotsError}</p>
             ) : slots.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {slots.map((slot) => (

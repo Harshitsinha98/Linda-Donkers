@@ -313,7 +313,11 @@ export function SessionForm({ session, onClose, onSaved }: { session?: AdminSess
         </Label>
 
         <Label text="How is it booked?" className="sm:col-span-2">
-          <select className={input} value={f.bookingMode} onChange={(e) => set("bookingMode", e.target.value as Form["bookingMode"])}>
+          <select className={input} value={f.bookingMode} onChange={(e) => {
+              const mode = e.target.value as Form["bookingMode"];
+              // Weekly availability only exists for appointment sessions; clear it so saving still works.
+              setF((x) => ({ ...x, bookingMode: mode, availabilityEnabled: mode === "appointment" ? x.availabilityEnabled : false }));
+            }}>
             <option value="scheduled">Fixed date & time (classes)</option>
             <option value="appointment">By appointment: the customer pays and gives a preferred moment, you confirm it (massages, healings)</option>
           </select>

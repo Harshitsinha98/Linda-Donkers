@@ -58,7 +58,8 @@ export function toPublic(row: SessionRow & { taken?: number }) {
     durationMin: row.duration_min,
     priceCents: row.price_cents,
     capacity: row.capacity,
-    spotsLeft: Math.max(0, row.capacity - (row.taken ?? 0)),
+    // Weekly appointment sessions are limited per time slot (overlap check), not by a lifetime capacity.
+    spotsLeft: row.availability_rule ? Math.max(1, row.capacity) : Math.max(0, row.capacity - (row.taken ?? 0)),
     maxPerBooking: row.max_per_booking,
     // The image itself is served separately so list payloads stay small.
     hasImage: !!row.image,
@@ -627,33 +628,21 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
   const minIso = new Date(minStart).toISOString();
   const maxIso = new Date(maxEnd).toISOString();
 
-  const [bookings, fixedSessions, otherRecurring] = await Promise.all([
+  const nowStamp = nowIso();
+  const [bookings, fixedSessions] = await Promise.all([
     all<{ appointment_start_at: string; appointment_end_at: string }>(
       "SELECT appointment_start_at, appointment_end_at FROM bookings " +
       "WHERE appointment_start_at IS NOT NULL AND appointment_end_at IS NOT NULL " +
       "AND appointment_start_at < ? AND appointment_end_at > ? " +
       "AND (status = 'confirmed' OR (status = 'pending' AND hold_until > ?))",
-      [maxIso, minIso, nowIso()],
+      [maxIso, minIso, nowStamp],
     ),
-    all<{ starts_at: string; duration_min: number; offering: string; category: string; title_nl: string; title_en: string }>(
-      "SELECT starts_at, duration_min, offering, category, title_nl, title_en FROM sessions " +
-      "WHERE id <> ? AND status = 'published' AND booking_mode = 'scheduled' " +
-      "AND starts_at < ? AND julianday(starts_at) + (duration_min / 1440.0) > julianday(?)",
-      [sessionId, maxIso, minIso],
-    ),
-    all<{
-      id: string;
-      date: string;
-      duration_min: number;
-      availability_rule: string;
-      offering: string;
-      category: string;
-      title_nl: string;
-      title_en: string;
-    }>(
-      "SELECT id, date, duration_min, availability_rule, offering, category, title_nl, title_en FROM sessions " +
-      "WHERE id <> ? AND status = 'published' AND booking_mode = 'appointment' AND availability_rule <> ''",
-      [sessionId],
+    all<{ starts_at: string; duration_min: number; offering: string; category: string; title_nl: string; title_en: string; live: number }>(
+      "SELECT s.starts_at, s.duration_min, s.offering, s.category, s.title_nl, s.title_en, " +
+      "(SELECT COUNT(*) FROM bookings y WHERE y.session_id = s.id AND (y.status = 'confirmed' OR (y.status = 'pending' AND y.hold_until > ?))) AS live " +
+      "FROM sessions s WHERE s.id <> ? AND s.status = 'published' AND s.booking_mode = 'scheduled' " +
+      "AND s.starts_at < ? AND julianday(s.starts_at) + (s.duration_min / 1440.0) > julianday(?)",
+      [nowStamp, sessionId, maxIso, minIso],
     ),
   ]);
 
@@ -661,34 +650,22 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
     startsAt: Date.parse(b.appointment_start_at),
     endsAt: Date.parse(b.appointment_end_at),
   }));
-  // Older weekly occurrences with the same offering are instances of this service, not
-  // competing appointments. Do not hide their own slot; only unrelated services block it.
+  // An unbooked weekly occurrence of the same service is just another way to book this service,
+  // so it doesn't hide this slot. Once someone booked it, Linda is busy and it blocks like anything else.
+  // Other recurring services only block through real bookings (bookingIntervals): their free
+  // configured slots must not make each other unbookable.
   const fixedIntervals: BusyInterval[] = fixedSessions
-    .filter((x) => !sameCalendarService(s, x))
+    .filter((x) => x.live > 0 || !sameCalendarService(s, x))
     .map((x) => {
       const start = Date.parse(x.starts_at);
       return { startsAt: start, endsAt: start + x.duration_min * 60_000 };
     });
-  const recurringIntervals: BusyInterval[] = [];
-  for (const other of otherRecurring) {
-    if (sameCalendarService(s, other)) continue;
-    const otherRule = parseAvailability(other.availability_rule);
-    if (!otherRule || !isRecurringDate(dateValue, other.date, otherRule)) continue;
-    for (const timeValue of otherRule.slotTimes) {
-      const start = zonedToUtc(dateValue, timeValue).getTime();
-      recurringIntervals.push({
-        startsAt: start,
-        endsAt: start + other.duration_min * 60_000 + otherRule.bufferMinutes * 60_000,
-      });
-    }
-  }
 
   return candidates
     .filter((slot) => {
       const busy = slot.busy;
       if (bookingIntervals.some((x) => intervalsOverlap(busy, x))) return false;
       if (fixedIntervals.some((x) => intervalsOverlap(busy, x))) return false;
-      if (recurringIntervals.some((x) => intervalsOverlap(busy, x))) return false;
       return true;
     })
     .map(({ time: timeValue, startsAt, endsAt }) => ({ time: timeValue, startsAt, endsAt }));

@@ -87,12 +87,12 @@ export function Header() {
             scrolled ? "bg-cream/80 py-3 shadow-[0_1px_0_rgba(46,58,47,0.08)] backdrop-blur-xl" : "py-5 sm:py-7"
           }`}
         >
-          <div className="container-x flex items-center justify-between gap-6">
-            <div className="flex flex-col">
+          <div className="container-x flex items-center justify-between gap-3 sm:gap-6">
+            <div className="flex min-w-0 flex-col">
               <Link to={ROUTES.home} aria-label="Linda Donkers – home" data-cursor="hover">
                 <Logo />
               </Link>
-              <div className="pl-10 sm:pl-12">
+              <div className="pl-0 min-[360px]:pl-10 sm:pl-12">
                 <PoweredByInfiskies />
               </div>
             </div>
@@ -123,7 +123,7 @@ export function Header() {
             </nav>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="sm:hidden">
+              <div className="hidden min-[360px]:block sm:hidden">
                 <LangToggle compact />
               </div>
               <div className="hidden sm:block">
@@ -133,7 +133,7 @@ export function Header() {
                 to={ROUTES.account}
                 aria-label={t.nav.account}
                 title={t.nav.account}
-                className="grid h-11 w-11 place-items-center rounded-full border border-forest/20 text-forest transition-colors hover:border-saffron hover:text-saffron"
+                className="hidden h-11 w-11 shrink-0 place-items-center sm:grid rounded-full border border-forest/20 text-forest transition-colors hover:border-saffron hover:text-saffron"
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
                   <circle cx="12" cy="8.5" r="3.6" />
@@ -151,7 +151,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="flex h-11 w-11 flex-col items-center justify-center gap-[5px] rounded-full border border-forest/20 xl:hidden"
+                className="flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-[5px] rounded-full border border-forest/20 xl:hidden"
                 aria-label={t.nav.menu}
                 aria-expanded={open}
               >
@@ -190,8 +190,8 @@ export function Header() {
                 ×
               </button>
             </div>
-            <nav className="container-x flex flex-1 flex-col justify-center gap-1" aria-label="Mobiel menu">
-              {[{ to: ROUTES.home, label: t.nav.home }, ...links].map((l, i) => (
+            <nav className="container-x flex min-h-0 flex-1 flex-col justify-center gap-1 overflow-y-auto py-4" aria-label="Mobiel menu" data-lenis-prevent>
+              {[{ to: ROUTES.home, label: t.nav.home }, ...links, { to: ROUTES.account, label: t.nav.account }].map((l, i) => (
                 <div key={l.to} className="overflow-hidden">
                   <motion.div
                     initial={{ y: "110%" }}
@@ -202,12 +202,12 @@ export function Header() {
                     <NavLink
                       to={l.to}
                       className={({ isActive }) =>
-                        `group flex items-baseline gap-4 font-display text-[clamp(2.2rem,8vw,4rem)] font-light leading-[1.15] ${
+                        `group flex items-baseline gap-4 font-display text-[clamp(1.8rem,min(8vw,5.2vh),4rem)] font-light leading-[1.15] ${
                           isActive ? "text-saffron-soft" : ""
                         }`
                       }
                     >
-                      <span className="font-sans text-xs tracking-widest text-linen/40">0{i + 1}</span>
+                      <span className="font-sans text-xs tracking-widest text-linen/40">{String(i + 1).padStart(2, "0")}</span>
                       <span className="transition-transform duration-500 group-hover:translate-x-3 group-hover:italic">
                         {l.label}
                       </span>
@@ -225,6 +225,7 @@ export function Header() {
               <a href={`mailto:${EMAIL}`} className="hover:text-saffron-soft">
                 {EMAIL}
               </a>
+              <LangToggle light compact />
               <SocialIcons tone="dark" size="sm" />
             </motion.div>
           </motion.div>

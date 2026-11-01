@@ -110,7 +110,7 @@ async function insertIfCapacity(b: NewBooking) {
     `INSERT INTO bookings (id, ref, token, session_id, name, email, phone, note, seats, amount_cents, lang, source, status, hold_until, created_at, confirmed_at,
        coupon_code, discount_cents, membership_id, user_id, preferred, appointment_start_at, appointment_end_at)
      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-     WHERE (SELECT s.capacity - ${TAKEN_SQL} FROM sessions s WHERE s.id = ? AND s.status = 'published' AND s.starts_at > ?) >= ?
+     WHERE (SELECT CASE WHEN ? IS NOT NULL THEN ? ELSE s.capacity - ${TAKEN_SQL} END FROM sessions s WHERE s.id = ? AND s.status = 'published' AND s.starts_at > ?) >= ?
        AND (
          ? IS NULL OR (
            NOT EXISTS (
@@ -125,12 +125,21 @@ async function insertIfCapacity(b: NewBooking) {
                AND julianday(x.starts_at) < julianday(?)
                AND julianday(x.starts_at) + (x.duration_min / 1440.0) > julianday(?)
                AND NOT (
-                 (
-                   COALESCE(x.offering, '') <> ''
-                   AND COALESCE(x.offering, '') = (SELECT COALESCE(target.offering, '') FROM sessions target WHERE target.id = ?)
+                 -- An unbooked occurrence of the same service doesn't block its own slot. A booked one does.
+                 NOT EXISTS (SELECT 1 FROM bookings y WHERE y.session_id = x.id AND (y.status = 'confirmed' OR (y.status = 'pending' AND y.hold_until > ?)))
+                 AND (
+                   (
+                     COALESCE(x.offering, '') <> ''
+                     AND COALESCE(x.offering, '') = (SELECT COALESCE(target.offering, '') FROM sessions target WHERE target.id = ?)
+                   )
+                   OR (
+                     x.category = (SELECT target.category FROM sessions target WHERE target.id = ?)
+                     AND (
+                       (trim(x.title_nl) <> '' AND lower(trim(x.title_nl)) = (SELECT lower(trim(target.title_nl)) FROM sessions target WHERE target.id = ?))
+                       OR (trim(x.title_en) <> '' AND lower(trim(x.title_en)) = (SELECT lower(trim(target.title_en)) FROM sessions target WHERE target.id = ?))
+                     )
+                   )
                  )
-                 OR lower(trim(x.title_nl)) = (SELECT lower(trim(target.title_nl)) FROM sessions target WHERE target.id = ?)
-                 OR lower(trim(x.title_en)) = (SELECT lower(trim(target.title_en)) FROM sessions target WHERE target.id = ?)
                )
            )
          )
@@ -139,9 +148,9 @@ async function insertIfCapacity(b: NewBooking) {
       b.id, b.ref, b.token, b.session_id, b.name, b.email, b.phone, b.note, b.seats, b.amount_cents, b.lang, b.source,
       b.status, b.hold_until, b.created_at, b.confirmed_at, b.coupon_code, b.discount_cents, b.membership_id, b.user_id, b.preferred,
       b.appointment_start_at, b.appointment_end_at,
-      now, b.session_id, now, b.seats,
+      b.appointment_start_at, b.seats, now, b.session_id, now, b.seats,
       b.appointment_start_at, now, b.appointment_end_at, b.appointment_start_at,
-      b.session_id, b.appointment_end_at, b.appointment_start_at, b.session_id, b.session_id, b.session_id,
+      b.session_id, b.appointment_end_at, b.appointment_start_at, now, b.session_id, b.session_id, b.session_id, b.session_id,
     ],
   );
 }
@@ -242,7 +251,9 @@ async function bookWithMembership(
 ) {
   if (!user) throw new HttpError(401, "login_required", "Please log in to use your membership.");
   if (input.seats !== 1) throw new HttpError(400, "membership_one_seat", "A membership pays for one place per booking.");
-  const m = (await usableFor(user, s)).find((x) => x.id === input.membershipId);
+  const m = (await usableFor(user, s)).find(
+    (x) => x.id === input.membershipId && (!appointmentSlot || appointmentSlot.startsAt <= x.expires_at!),
+  );
   if (!m) throw new HttpError(409, "membership_not_usable", "This membership can't be used for this session.");
   if (!(await useCredit(m))) throw new HttpError(409, "membership_not_usable", "No sessions left on this membership.");
 
@@ -415,7 +426,7 @@ export async function cancelBooking(
     throw new HttpError(409, "too_late", "This session has already started.");
   }
 
-  const percent = opts.mode === "full" ? 100 : opts.mode === "none" ? 0 : refundPercent(s.starts_at);
+  const percent = opts.mode === "full" ? 100 : opts.mode === "none" ? 0 : refundPercent(bookingStartsAt);
   let refund = Math.max(0, Math.round((b.amount_cents * percent) / 100) - b.refunded_cents);
   if (!b.stripe_payment_intent) refund = 0; // manual / free bookings: nothing to refund online
 
