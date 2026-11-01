@@ -4,6 +4,7 @@
  */
 import type { BookingRow } from "./bookings.js";
 import type { MembershipRow, PlanRow } from "./memberships.js";
+import type { GiftCardRow } from "./giftcards.js";
 import type { SessionRow } from "./sessions.js";
 import { formatEuro, formatWhen } from "./time.js";
 
@@ -209,6 +210,7 @@ export async function sendBookingConfirmed(
     [c.seats, String(b.seats)],
   ];
   if (b.discount_cents > 0) details.push([c.discount, `${esc(b.coupon_code)} −${esc(formatEuro(b.discount_cents, b.lang))}`]);
+  if (b.gift_cents > 0) details.push([b.lang === "en" ? "Gift card" : "Cadeaubon", `−${esc(formatEuro(b.gift_cents, b.lang))}`]);
   if (b.amount_cents > 0) details.push([c.paid, esc(formatEuro(b.amount_cents, b.lang))]);
   if (b.membership_id) details.push([c.paid, esc(c.paidWithCard)]);
   if (s.is_online) {
@@ -352,4 +354,70 @@ ${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`);
     send(m.email, c.cardSubject(title), customer, ADMIN_EMAIL()),
     m.source === "manual" ? Promise.resolve(true) : send(ADMIN_EMAIL(), `New membership: ${m.name} · ${plan?.name_nl ?? ""}`, admin, m.email),
   ]);
+}
+
+/* ---------------- gift cards ---------------- */
+
+/**
+ * Sends the gift card code. With a recipient email the recipient gets the card and the buyer a receipt;
+ * without one the buyer gets the card to pass on. Linda gets a notification for online purchases.
+ */
+export async function sendGiftCard(g: GiftCardRow, base: string) {
+  const en = g.lang === "en";
+  const amount = esc(formatEuro(g.initial_cents, g.lang));
+  const until = g.expires_at ? esc(dateOnly(g.expires_at, g.lang)) : "-";
+  const codeBox = `<p style="margin:22px 0;padding:18px;border-radius:14px;background:#f4eee3;text-align:center;font-family:Georgia,serif;font-size:26px;letter-spacing:3px;color:#1d241e">${esc(g.code)}</p>`;
+  const how = en
+    ? "Use it on the website: book a session or buy a class card and enter this code under \"Gift card\". What you don't use stays on the card for next time."
+    : "Gebruik hem op de website: boek een sessie of koop een beurtenkaart en vul deze code in bij \"Cadeaubon\". Wat je niet gebruikt, blijft op de bon staan voor een volgende keer.";
+  const card = (forName: string, intro: string) =>
+    layout(`
+<p style="font-size:16px;margin:0 0 12px">${esc(en ? `Hello ${forName},` : `Hallo ${forName},`)}</p>
+<p style="font-size:15px;line-height:1.6;margin:0">${intro}</p>
+${g.message ? `<p style="font-size:15px;line-height:1.6;margin:16px 0 0;font-style:italic">“${nl2br(g.message)}”</p>` : ""}
+${codeBox}
+${rows([
+  [en ? "Value" : "Waarde", amount],
+  [en ? "Valid until" : "Geldig tot", until],
+])}
+<p style="font-size:14px;line-height:1.6;margin:0 0 14px">${esc(how)}</p>
+${button(`${base}/agenda`, en ? "Book a session" : "Boek een sessie", "#2e3a2f")}
+<p style="margin:26px 0 0;font-size:15px;line-height:1.6">${L(g.lang).bye}</p>`);
+
+  const tasks: Promise<boolean>[] = [];
+  const subject = en ? `Your gift card from Linda Donkers (${formatEuro(g.initial_cents, "en")})` : `Je cadeaubon van Linda Donkers (${formatEuro(g.initial_cents, "nl")})`;
+  if (g.recipient_email) {
+    const from = g.buyer_name || (en ? "someone" : "iemand");
+    tasks.push(send(g.recipient_email, subject, card(g.recipient_name || "", en ? `${esc(from)} gives you a gift card for a moment with Linda.` : `${esc(from)} geeft je een cadeaubon voor een moment bij Linda.`), ADMIN_EMAIL()));
+    tasks.push(
+      send(
+        g.buyer_email,
+        en ? "Your gift card has been sent" : "Je cadeaubon is verstuurd",
+        card(g.buyer_name, en ? `Thank you! The gift card was emailed to ${esc(g.recipient_email)}. Here is a copy.` : `Dankjewel! De cadeaubon is gemaild naar ${esc(g.recipient_email)}. Hier is een kopie.`),
+        ADMIN_EMAIL(),
+      ),
+    );
+  } else {
+    tasks.push(send(g.buyer_email, subject, card(g.buyer_name, en ? "Thank you! Here is your gift card. Pass the code on, or use it yourself." : "Dankjewel! Hier is je cadeaubon. Geef de code door, of gebruik hem zelf."), ADMIN_EMAIL()));
+  }
+  if (g.source === "web") {
+    tasks.push(
+      send(
+        ADMIN_EMAIL(),
+        `New gift card: ${formatEuro(g.initial_cents, "en")} · ${g.buyer_name}`,
+        layout(`<p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">New gift card 🎁</p>
+${rows([
+  ["Value", amount],
+  ["Code", esc(g.code)],
+  ["Bought by", `${esc(g.buyer_name)} · ${esc(g.buyer_email)}`],
+  ["For", esc([g.recipient_name, g.recipient_email].filter(Boolean).join(" · ") || "-")],
+  ["Valid until", until],
+  ["Reference", esc(g.ref)],
+])}
+${button(`${base}/admin`, "Open admin panel", "#2e3a2f")}`),
+        g.buyer_email,
+      ),
+    );
+  }
+  await Promise.all(tasks);
 }

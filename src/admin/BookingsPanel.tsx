@@ -63,6 +63,7 @@ export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking;
           {b.membershipId ? "Paid with membership (1 session)" : b.amountCents > 0 ? `Paid ${euro(b.amountCents)}${b.paidOnline ? "" : " (offline)"}` : "Free"}
         </span>
         {b.couponCode && <span>Code {b.couponCode} (−{euro(b.discountCents)})</span>}
+        {b.giftCents > 0 && <span>Gift card {euro(b.giftCents)}{b.giftRefundedCents ? ` (${euro(b.giftRefundedCents)} returned)` : ""}</span>}
         {b.preferred && (
           <span>
             Preferred time: <strong>{b.preferred}</strong>

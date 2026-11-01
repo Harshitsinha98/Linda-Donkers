@@ -61,6 +61,8 @@ export type AdminBooking = {
   paidOnline: boolean;
   couponCode: string;
   discountCents: number;
+  giftCents: number;
+  giftRefundedCents: number;
   membershipId: string | null;
   preferred: string;
 };

@@ -35,6 +35,7 @@ export const ROUTES = {
   memberships: "/beurtenkaarten",
   /** Old address of the class cards page, still served (Stripe links, shared links). */
   membershipsOld: "/lidmaatschap",
+  gift: "/cadeaubon",
   account: "/account",
 } as const;
 

@@ -7,6 +7,7 @@ import { api, ApiError, fmtEuro, photoFocus, photoSrc, type MembershipPlan } fro
 import { useAuth } from "../lib/auth";
 import { Arrow } from "../components/Arrow";
 import { CouponField, type AppliedCoupon } from "../components/CouponField";
+import { GiftCardField, giftSplit, type AppliedGift } from "../components/GiftCardField";
 import { LoginBox } from "../components/LoginBox";
 import { Button } from "../components/Magnetic";
 import { FadeUp, RevealText } from "../components/Reveal";
@@ -25,11 +26,14 @@ function BuyPanel({ plan, onClose }: { plan: MembershipPlan; onClose: () => void
   const [phone, setPhone] = useState("");
   const [terms, setTerms] = useState(false);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [gift, setGift] = useState<AppliedGift | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => setName((n) => n || auth.name), [auth.name]);
 
-  const total = coupon ? coupon.totalCents : plan.priceCents;
+  const afterCoupon = coupon ? coupon.totalCents : plan.priceCents;
+  const split = giftSplit(gift, afterCoupon);
+  const total = split.rest;
 
   const buy = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +44,7 @@ function BuyPanel({ plan, onClose }: { plan: MembershipPlan; onClose: () => void
     try {
       const r = await auth.authApi<{ url?: string; ref?: string }>("/api/membership-checkout", {
         method: "POST",
-        body: JSON.stringify({ planId: plan.id, name, phone, lang, couponCode: coupon?.code ?? "", acceptTerms: true }),
+        body: JSON.stringify({ planId: plan.id, name, phone, lang, couponCode: coupon?.code ?? "", giftCode: gift && split.used > 0 ? gift.code : "", acceptTerms: true }),
       });
       if (r.url) {
         window.location.href = r.url;
@@ -50,8 +54,11 @@ function BuyPanel({ plan, onClose }: { plan: MembershipPlan; onClose: () => void
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "";
       if (code.startsWith("coupon_")) setCoupon(null);
+      if (code.startsWith("gift_")) setGift(null);
       setError(
-        code.startsWith("coupon_")
+        code.startsWith("gift_")
+          ? (t.gift.errors[code] ?? t.gift.errors.generic)
+          : code.startsWith("coupon_")
           ? (t.booking.couponErrors[code] ?? t.booking.couponErrors.generic)
           : code === "payments_unavailable"
             ? t.booking.errors.payments
@@ -89,6 +96,7 @@ function BuyPanel({ plan, onClose }: { plan: MembershipPlan; onClose: () => void
             <input className={inputCls} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" placeholder="+32" />
           </label>
           {plan.priceCents > 0 && <CouponField target={{ planId: plan.id, email: auth.email }} applied={coupon} onChange={setCoupon} />}
+          {afterCoupon > 0 && <GiftCardField dueCents={afterCoupon} applied={gift} onChange={setGift} />}
           <label className="flex cursor-pointer items-start gap-3 text-sm font-semibold text-forest">
             <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} className="mt-0.5 h-5 w-5 accent-[var(--color-saffron)]" />
             <span>{m.terms}</span>
@@ -96,7 +104,7 @@ function BuyPanel({ plan, onClose }: { plan: MembershipPlan; onClose: () => void
           <div className="flex items-baseline justify-between border-t border-forest/10 pt-4">
             <span className="text-sm font-bold uppercase tracking-[0.16em] text-sage">{m.total}</span>
             <span className="font-display text-3xl text-ink">
-              {coupon && <s className="mr-2 text-lg text-forest/40">{fmtEuro(plan.priceCents, lang)}</s>}
+              {(coupon || split.used > 0) && <s className="mr-2 text-lg text-forest/40">{fmtEuro(plan.priceCents, lang)}</s>}
               {fmtEuro(total, lang)}
             </span>
           </div>

@@ -10,6 +10,7 @@ import { BookingRowCard, SessionBookings } from "./BookingsPanel";
 import { Badge, Btn, ErrorNote, input, Label, Modal } from "./ui";
 import { CouponsTab } from "./CouponsTab";
 import { MembershipsTab } from "./MembershipsTab";
+import { GiftCardsTab } from "./GiftCardsTab";
 import { OFFERINGS } from "../../shared/catalog";
 
 function Login({ onOk }: { onOk: () => void }) {
@@ -597,7 +598,7 @@ function BookingsTab() {
 export default function AdminApp() {
   usePageTitle("Admin | Linda Donkers");
   const [authed, setAuthed] = useState(() => !!getPass());
-  const [tab, setTab] = useState<"sessions" | "bookings" | "coupons" | "memberships">("sessions");
+  const [tab, setTab] = useState<"sessions" | "bookings" | "coupons" | "memberships" | "gift cards">("sessions");
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -637,13 +638,13 @@ export default function AdminApp() {
             </Btn>
           </div>
         </div>
-        <nav className="mx-auto flex max-w-5xl gap-1 px-4 sm:px-6" aria-label="Admin">
-          {(["sessions", "bookings", "coupons", "memberships"] as const).map((k) => (
+        <nav className="mx-auto flex max-w-5xl gap-1 overflow-x-auto px-4 sm:px-6" aria-label="Admin">
+          {(["sessions", "bookings", "coupons", "memberships", "gift cards"] as const).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setTab(k)}
-              className={`border-b-2 px-4 py-2.5 text-sm font-bold capitalize ${tab === k ? "border-saffron text-ink" : "border-transparent text-forest/60"}`}
+              className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-bold capitalize ${tab === k ? "border-saffron text-ink" : "border-transparent text-forest/60"}`}
             >
               {k}
             </button>
@@ -651,7 +652,7 @@ export default function AdminApp() {
         </nav>
       </header>
       <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
-        {tab === "sessions" ? <SessionsTab /> : tab === "bookings" ? <BookingsTab /> : tab === "coupons" ? <CouponsTab /> : <MembershipsTab />}
+        {tab === "sessions" ? <SessionsTab /> : tab === "bookings" ? <BookingsTab /> : tab === "coupons" ? <CouponsTab /> : tab === "memberships" ? <MembershipsTab /> : <GiftCardsTab />}
       </main>
     </div>
   );

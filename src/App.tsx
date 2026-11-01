@@ -24,6 +24,7 @@ const SessionDetail = lazy(() => import("./pages/SessionDetail"));
 const BookingStatus = lazy(() => import("./pages/BookingStatus"));
 const Memberships = lazy(() => import("./pages/Memberships"));
 const Account = lazy(() => import("./pages/Account"));
+const GiftCard = lazy(() => import("./pages/GiftCard"));
 const AdminApp = lazy(() => import("./admin/AdminApp"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -87,6 +88,7 @@ function Site() {
               <Route path={ROUTES.memberships} element={<Page><Memberships /></Page>} />
               <Route path={ROUTES.membershipsOld} element={<Page><Memberships /></Page>} />
               <Route path={ROUTES.account} element={<Page><Account /></Page>} />
+              <Route path={ROUTES.gift} element={<Page><GiftCard /></Page>} />
               <Route path={ROUTES.travel} element={<Page><Travel /></Page>} />
               <Route path={ROUTES.gallery} element={<Page><Gallery /></Page>} />
               <Route path={ROUTES.contact} element={<Page><Contact /></Page>} />

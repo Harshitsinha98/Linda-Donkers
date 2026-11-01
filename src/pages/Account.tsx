@@ -10,20 +10,53 @@ import { Button } from "../components/Magnetic";
 import { RevealText } from "../components/Reveal";
 import { usePageTitle } from "../components/usePageTitle";
 
+type Group = "upcoming" | "completed" | "cancelled";
+const GROUPS: Group[] = ["upcoming", "completed", "cancelled"];
+
 type AccountBooking = {
   ref: string;
   manageUrl: string;
+  group: Group;
   status: "confirmed" | "cancelled";
   seats: number;
   amountCents: number;
+  giftCents: number;
   paidWithMembership: boolean;
   preferred: string;
   title: { nl: string; en: string };
   startsAt: string;
+  undated: boolean;
   bookingMode: "scheduled" | "appointment";
   isOnline: boolean;
   venue: string;
+  refundedCents: number;
+  giftRefundedCents: number;
+  creditReturned: boolean;
 };
+
+type Refund = {
+  kind: "booking" | "membership";
+  ref: string;
+  title: { nl: string; en: string };
+  date: string | null;
+  toCardCents: number;
+  toGiftCardCents: number;
+  creditReturned: boolean;
+  manageUrl: string;
+};
+
+type AccountGift = {
+  ref: string;
+  code: string;
+  balanceCents: number;
+  initialCents: number;
+  expiresAt: string | null;
+  status: string;
+  role: "received" | "bought";
+  recipientName: string;
+};
+
+type AccountData = { memberships: MembershipView[]; bookings: AccountBooking[]; refunds: Refund[]; giftCards: AccountGift[] };
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-[#e7f3e4] text-forest",
@@ -70,13 +103,14 @@ export default function Account() {
   const auth = useAuth();
   const [params] = useSearchParams();
   const justPaid = params.get("paid") === "1";
-  const [data, setData] = useState<{ memberships: MembershipView[]; bookings: AccountBooking[] } | null>(null);
+  const [data, setData] = useState<AccountData | null>(null);
+  const [tab, setTab] = useState<Group>("upcoming");
   const [error, setError] = useState(false);
   const [polls, setPolls] = useState(0);
 
   const load = useCallback(() => {
     auth
-      .authApi<{ memberships: MembershipView[]; bookings: AccountBooking[] }>("/api/account")
+      .authApi<AccountData>("/api/account")
       .then((d) => {
         setData(d);
         setError(false);
@@ -149,28 +183,105 @@ export default function Account() {
             )}
 
             <h2 className="mt-14 font-display text-3xl font-light text-ink">{a.bookings}</h2>
-            {data && data.bookings.length === 0 && <p className="mt-4 text-forest/70">{a.noBookings}</p>}
-            {data && data.bookings.length > 0 && (
+            <div role="tablist" aria-label={a.bookings} className="mt-5 inline-flex flex-wrap gap-1 rounded-full border border-forest/15 p-1">
+              {GROUPS.map((g) => {
+                const n = data?.bookings.filter((b) => b.group === g).length ?? 0;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === g}
+                    onClick={() => setTab(g)}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === g ? "bg-forest text-linen" : "text-forest hover:text-saffron"}`}
+                  >
+                    {a.tabs[g]}
+                    {data && <span className={`rounded-full px-2 py-0.5 text-[0.7rem] ${tab === g ? "bg-linen/20" : "bg-sand"}`}>{n}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            {data && (() => {
+              const list = data.bookings.filter((b) => b.group === tab);
+              if (list.length === 0) return <p className="mt-5 text-forest/70">{a.noneIn[tab]}</p>;
+              return (
+                <ul className="mt-5 divide-y divide-forest/10 rounded-[1.6rem] border border-forest/10 bg-linen">
+                  {list.map((b) => {
+                    const paid = b.paidWithMembership
+                      ? t.booking.status.paidWithMembership
+                      : [b.amountCents > 0 || b.giftCents === 0 ? fmtEuro(b.amountCents, lang) : "", b.giftCents > 0 ? a.paidGift(fmtEuro(b.giftCents, lang)) : ""]
+                          .filter(Boolean)
+                          .join(" + ");
+                    return (
+                      <li key={b.ref} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-ink">{b.title[lang]}</p>
+                          <p className="text-sm text-forest/60 first-letter:uppercase">
+                            {b.undated ? `${t.agenda.appointment}${b.preferred ? ` · ${b.preferred}` : ""}` : fmtLong(b.startsAt, lang)} · {paid}
+                          </p>
+                        </div>
+                        <Link to={b.manageUrl} className="text-sm font-semibold text-forest underline underline-offset-4 hover:text-saffron">
+                          {a.manage}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+
+            <h2 className="mt-14 font-display text-3xl font-light text-ink">{a.refunds}</h2>
+            {data && data.refunds.length === 0 && <p className="mt-4 text-forest/70">{a.noRefunds}</p>}
+            {data && data.refunds.length > 0 && (
               <ul className="mt-5 divide-y divide-forest/10 rounded-[1.6rem] border border-forest/10 bg-linen">
-                {data.bookings.map((b) => (
-                  <li key={b.ref} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                {data.refunds.map((r) => (
+                  <li key={r.kind + r.ref} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
                     <div className="min-w-0">
-                      <p className="font-semibold text-ink">{b.title[lang]}</p>
-                      <p className="text-sm text-forest/60 first-letter:uppercase">
-                        {b.bookingMode === "appointment" ? `${t.agenda.appointment}${b.preferred ? ` · ${b.preferred}` : ""}` : fmtLong(b.startsAt, lang)} ·{" "}
-                        {b.paidWithMembership ? t.booking.status.paidWithMembership : fmtEuro(b.amountCents, lang)}
-                        {b.status === "cancelled" ? ` · ${t.account.status.cancelled}` : ""}
+                      <p className="font-semibold text-ink">{r.title[lang]}</p>
+                      <ul className="mt-1 text-sm text-forest/70">
+                        {r.toCardCents > 0 && <li>{a.refundToCard(fmtEuro(r.toCardCents, lang))}</li>}
+                        {r.toGiftCardCents > 0 && <li>{a.refundToGift(fmtEuro(r.toGiftCardCents, lang))}</li>}
+                        {r.creditReturned && <li>{a.refundCredit}</li>}
+                      </ul>
+                      <p className="mt-1 text-xs text-forest/50">
+                        {r.date ? fmtDate(r.date, lang) : ""} · {r.ref}
                       </p>
                     </div>
-                    <Link to={b.manageUrl} className="text-sm font-semibold text-forest underline underline-offset-4 hover:text-saffron">
-                      {a.manage}
-                    </Link>
+                    {r.manageUrl && (
+                      <Link to={r.manageUrl} className="text-sm font-semibold text-forest underline underline-offset-4 hover:text-saffron">
+                        {a.manage}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-            <div className="mt-10">
+
+            {data && data.giftCards.length > 0 && (
+              <>
+                <h2 className="mt-14 font-display text-3xl font-light text-ink">{a.giftCards}</h2>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  {data.giftCards.map((g) => (
+                    <div key={g.ref} className={`rounded-[1.6rem] border border-forest/10 bg-linen p-5 ${g.status === "active" ? "" : "opacity-60"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-mono text-lg font-bold tracking-wider text-ink">{g.code}</p>
+                        <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_TONE[g.status] ?? ""}`}>{a.status[g.status] ?? g.status}</span>
+                      </div>
+                      <p className="mt-2 font-semibold text-forest">{a.giftLeft(fmtEuro(g.balanceCents, lang), fmtEuro(g.initialCents, lang))}</p>
+                      <p className="mt-1 text-sm text-forest/60">
+                        {g.role === "received" ? a.giftReceived : `${a.giftBought}${g.recipientName ? ` · ${g.recipientName}` : ""}`}
+                        {g.expiresAt ? ` · ${a.validUntil(fmtDate(g.expiresAt, lang))}` : ""}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            <div className="mt-10 flex flex-wrap gap-4">
               <Button to={ROUTES.agenda}>{a.bookNow}</Button>
+              <Button to={ROUTES.gift} variant="ghost">
+                {t.gift.cta}
+              </Button>
             </div>
           </>
         )}
