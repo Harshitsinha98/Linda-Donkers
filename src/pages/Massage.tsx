@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLang } from "../i18n/LanguageContext";
 import { Link } from "react-router-dom";
 import { IMG, ROUTES, sm, waLink } from "../data/site";
-import { api, useSessions, type MembershipPlan, type PublicSession } from "../lib/api";
+import { api, planFor, useSessions, type MembershipPlan, type PublicSession } from "../lib/api";
 
 /** Linda's own photos per treatment. M.E.R. and Chi Nei Tsang reuse her massage photos until dedicated ones exist. */
 const TREATMENT_IMG: Record<string, string> = {
@@ -78,8 +78,8 @@ function sessionsForTreatment(list: PublicSession[] | null, key: string): Public
 }
 
 function membershipForTreatment(plans: MembershipPlan[] | null, key: string): MembershipPlan | null {
-  if (!plans || (key !== "mer" && key !== "lomi")) return null;
-  return plans.find((plan) => plan.status === "active" && plan.credits === 5 && plan.priceCents === 60000 && plan.scope.includes(key)) ?? null;
+  if (key !== "mer" && key !== "lomi") return null;
+  return planFor(plans, key, 5);
 }
 
 export default function Massage() {

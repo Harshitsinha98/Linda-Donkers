@@ -14,6 +14,13 @@ export function scrollToTop(immediate = false) {
   else window.scrollTo({ top: 0, behavior: immediate ? "auto" : "smooth" });
 }
 
+/** Smoothly scrolls an element into view, leaving room for the fixed header. */
+export function scrollToElement(el: HTMLElement, offset = 110) {
+  // `force`: also works while the intro/page curtain has paused smooth scrolling.
+  if (lenis) lenis.scrollTo(el, { offset: -offset, force: true });
+  else window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: "smooth" });
+}
+
 /** Lenis smooth scrolling (desktop + touch keeps native), disabled for reduced motion. */
 export function SmoothScroll() {
   useEffect(() => {

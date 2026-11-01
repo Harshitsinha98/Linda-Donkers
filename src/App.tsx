@@ -85,6 +85,7 @@ function Site() {
               <Route path={`${ROUTES.agenda}/:id`} element={<Page><SessionDetail /></Page>} />
               <Route path={`${ROUTES.booking}/:ref`} element={<Page><BookingStatus /></Page>} />
               <Route path={ROUTES.memberships} element={<Page><Memberships /></Page>} />
+              <Route path={ROUTES.membershipsOld} element={<Page><Memberships /></Page>} />
               <Route path={ROUTES.account} element={<Page><Account /></Page>} />
               <Route path={ROUTES.travel} element={<Page><Travel /></Page>} />
               <Route path={ROUTES.gallery} element={<Page><Gallery /></Page>} />

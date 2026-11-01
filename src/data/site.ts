@@ -32,7 +32,9 @@ export const ROUTES = {
   contact: "/contact",
   privacy: "/privacy",
   terms: "/voorwaarden",
-  memberships: "/lidmaatschap",
+  memberships: "/beurtenkaarten",
+  /** Old address of the class cards page, still served (Stripe links, shared links). */
+  membershipsOld: "/lidmaatschap",
   account: "/account",
 } as const;
 

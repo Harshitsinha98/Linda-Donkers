@@ -292,7 +292,7 @@ export async function startPurchase(user: AuthUser, input: z.infer<typeof purcha
         locale: input.lang === "en" ? "en" : "nl",
         expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
         success_url: `${base}/account?membership=${ref}&paid=1`,
-        cancel_url: `${base}/lidmaatschap?aborted=1`,
+        cancel_url: `${base}/beurtenkaarten?aborted=1`,
       },
       { idempotencyKey: `membership-${id}` },
     );
