@@ -17,6 +17,7 @@ import { ParallaxFrames } from "../components/gallery/ParallaxFrames";
 import { usePageTitle } from "../components/usePageTitle";
 import { UpcomingSessions } from "../components/sessions/UpcomingSessions";
 import { SocialCards } from "../components/SocialLinks";
+import { CardsAndGifts } from "../components/CardsAndGifts";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -398,6 +399,7 @@ export default function Home() {
       <UpcomingSessions />
       <Intro />
       <Pillars />
+      <CardsAndGifts />
       <Filmstrip />
       <Breathe />
       <Quote />

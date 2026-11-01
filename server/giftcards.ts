@@ -42,6 +42,8 @@ export type GiftCardRow = {
   created_at: string;
   activated_at: string | null;
   cancelled_at: string | null;
+  /** 1 = bought for the buyer's own use, 0 = a present. */
+  for_self: number;
 };
 
 export const GIFT_MIN_CENTS = 1000;
@@ -149,13 +151,14 @@ export const giftPurchaseInput = z.object({
   recipientName: z.string().trim().max(120).default(""),
   recipientEmail: z.string().trim().toLowerCase().email().max(200).or(z.literal("")).default(""),
   message: z.string().trim().max(500).default(""),
+  forSelf: z.boolean().default(false),
   lang: z.enum(["nl", "en"]).default("nl"),
   acceptTerms: z.literal(true),
 });
 
 async function insertCard(fields: {
   initial: number; buyerName: string; buyerEmail: string; recipientName: string; recipientEmail: string; message: string;
-  lang: string; source: "web" | "manual"; status: "pending" | "active"; paid: number;
+  lang: string; source: "web" | "manual"; status: "pending" | "active"; paid: number; forSelf?: boolean;
 }) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = newCode();
@@ -175,6 +178,7 @@ async function insertCard(fields: {
           active ? now.toISOString() : null,
         ],
       );
+      if (fields.forSelf) await run(`UPDATE gift_cards SET for_self = 1 WHERE id = ?`, [id]);
       if (active) await ledger(id, "purchase", fields.initial, { note: fields.source === "manual" ? "Added by Linda" : "" });
       return (await getGiftCard(id))!;
     } catch (err) {
@@ -187,8 +191,9 @@ async function insertCard(fields: {
 export async function startGiftPurchase(input: z.infer<typeof giftPurchaseInput>, base: string) {
   if (!stripeConfigured()) throw new HttpError(503, "payments_unavailable");
   const g = await insertCard({
-    initial: input.amountCents, buyerName: input.buyerName, buyerEmail: input.buyerEmail, recipientName: input.recipientName,
-    recipientEmail: input.recipientEmail, message: input.message, lang: input.lang, source: "web", status: "pending", paid: input.amountCents,
+    initial: input.amountCents, buyerName: input.buyerName, buyerEmail: input.buyerEmail,
+    recipientName: input.forSelf ? "" : input.recipientName, recipientEmail: input.forSelf ? "" : input.recipientEmail,
+    message: input.forSelf ? "" : input.message, lang: input.lang, source: "web", status: "pending", paid: input.amountCents, forSelf: input.forSelf,
   });
   const en = input.lang === "en";
   try {
@@ -205,7 +210,7 @@ export async function startGiftPurchase(input: z.infer<typeof giftPurchaseInput>
                 name: en ? "Gift card Linda Donkers" : "Cadeaubon Linda Donkers",
                 description: [
                   en ? "Valid for 1 year" : "1 jaar geldig",
-                  input.recipientName ? (en ? `For ${input.recipientName}` : `Voor ${input.recipientName}`) : "",
+                  !input.forSelf && input.recipientName ? (en ? `For ${input.recipientName}` : `Voor ${input.recipientName}`) : "",
                 ].filter(Boolean).join(" · "),
               },
             },
@@ -291,7 +296,7 @@ export async function listForEmail(email: string) {
   return rows.map((g) => ({
     ...giftPublic(g),
     ref: g.ref,
-    role: g.recipient_email === email ? ("received" as const) : ("bought" as const),
+    role: g.recipient_email === email ? ("received" as const) : g.for_self ? ("own" as const) : ("bought" as const),
     recipientName: g.recipient_name,
     createdAt: g.created_at,
   }));

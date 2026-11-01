@@ -52,7 +52,7 @@ type AccountGift = {
   initialCents: number;
   expiresAt: string | null;
   status: string;
-  role: "received" | "bought";
+  role: "received" | "bought" | "own";
   recipientName: string;
 };
 
@@ -269,7 +269,7 @@ export default function Account() {
                       </div>
                       <p className="mt-2 font-semibold text-forest">{a.giftLeft(fmtEuro(g.balanceCents, lang), fmtEuro(g.initialCents, lang))}</p>
                       <p className="mt-1 text-sm text-forest/60">
-                        {g.role === "received" ? a.giftReceived : `${a.giftBought}${g.recipientName ? ` · ${g.recipientName}` : ""}`}
+                        {g.role === "received" ? a.giftReceived : g.role === "own" ? a.giftOwn : `${a.giftBought}${g.recipientName ? ` · ${g.recipientName}` : ""}`}
                         {g.expiresAt ? ` · ${a.validUntil(fmtDate(g.expiresAt, lang))}` : ""}
                       </p>
                     </div>
