@@ -291,7 +291,7 @@ ${button(waTo(WHATSAPP(), c.waText(b.ref)), c.whatsapp, "#25a244")}
 <p style="font-size:18px;margin:0 0 6px;font-family:Georgia,serif">Booking cancelled by the customer</p>
 ${rows([
   ["Session", esc(s.title_nl)],
-  ["When", esc(formatWhen(s.starts_at, "en"))],
+  ["When", esc(formatWhen(b.appointment_start_at ?? s.starts_at, "en"))],
   ["Name", esc(b.name)],
   ["Email", esc(b.email)],
   ["Phone", esc(b.phone || "-")],
