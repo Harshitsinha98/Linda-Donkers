@@ -1,7 +1,8 @@
 import { motion } from "framer-motion";
 import { useLang } from "../i18n/LanguageContext";
 import { Link } from "react-router-dom";
-import { IMG, ROUTES, YOUTUBE, sm, waLink } from "../data/site";
+import { IMG, ROUTES, YOUTUBE, sm } from "../data/site";
+import { planFor, planLink, usePlans } from "../lib/api";
 import { Arrow } from "../components/Arrow";
 import { PageHero } from "../components/PageHero";
 import { FadeUp, RevealImage, RevealText } from "../components/Reveal";
@@ -26,6 +27,9 @@ export default function Yoga() {
   const { t } = useLang();
   const y = t.yoga;
   usePageTitle(t.meta.yoga);
+  const plans = usePlans();
+  // The 10-class card is bought online: link to it on the class cards page (overview while loading or if it is missing).
+  const classCardLink = planLink(planFor(plans, "yoga-group", 10));
 
   return (
     <>
@@ -99,9 +103,9 @@ export default function Yoga() {
             {y.offers.map((o, i) => {
               const cta =
                 o.action === "ask" ? (
-                  <a href={waLink(y.askText)} target="_blank" rel="noreferrer" className={OFFER_CTA}>
+                  <Link to={classCardLink} className={OFFER_CTA}>
                     {y.askCta} <Arrow className="h-3.5 w-3.5" />
-                  </a>
+                  </Link>
                 ) : (
                   <Link to={`${ROUTES.agenda}?cat=yoga${o.action === "bookOnline" ? "&online=1" : ""}`} className={OFFER_CTA}>
                     {y.bookCta} <Arrow className="h-3.5 w-3.5" />

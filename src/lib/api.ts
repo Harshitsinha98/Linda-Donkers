@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Lang } from "../i18n/content";
-import { IMG, sm } from "../data/site";
+import { IMG, ROUTES, sm } from "../data/site";
+
+const ROUTES_MEMBERSHIPS = ROUTES.memberships;
 import { OFFERINGS, PHOTO_FOCUS, type PhotoKey, type Section } from "../../shared/catalog";
 
 export type PublicSession = {
@@ -192,6 +194,32 @@ export function sessionImageSrc(s: ImgInput): { src: string; srcSet?: string; po
 }
 
 export type { Section };
+
+/**
+ * The active class card on sale for a kind of session (scope key such as "yoga-group", "mer", "lomi").
+ * Prefers a card with `credits` sessions when given, so a 10-class card wins over other yoga cards.
+ */
+export function planFor(plans: MembershipPlan[] | null, scopeKey: string, credits?: number): MembershipPlan | null {
+  const matching = (plans ?? []).filter((p) => p.status === "active" && p.scope.includes(scopeKey));
+  return matching.find((p) => p.credits === credits) ?? matching[0] ?? null;
+}
+
+/** Class card link: straight to the matching card when it exists, otherwise to the overview. */
+export const planLink = (plan: MembershipPlan | null) => (plan ? `${ROUTES_MEMBERSHIPS}?plan=${encodeURIComponent(plan.id)}` : ROUTES_MEMBERSHIPS);
+
+export function usePlans() {
+  const [plans, setPlans] = useState<MembershipPlan[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api<{ plans: MembershipPlan[] }>("/api/memberships")
+      .then((d) => alive && setPlans(d.plans))
+      .catch(() => alive && setPlans([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return plans;
+}
 
 /* ---------------- hooks ---------------- */
 

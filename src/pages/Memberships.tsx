@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLang } from "../i18n/LanguageContext";
 import { ROUTES, sm, waLink } from "../data/site";
@@ -11,6 +11,7 @@ import { LoginBox } from "../components/LoginBox";
 import { Button } from "../components/Magnetic";
 import { FadeUp, RevealText } from "../components/Reveal";
 import { usePageTitle } from "../components/usePageTitle";
+import { scrollToElement } from "../components/SmoothScroll";
 
 const inputCls =
   "mt-2 w-full rounded-xl border border-forest/15 bg-cream/60 px-4 py-3 text-base text-ink outline-none transition-colors placeholder:text-forest/30 focus:border-saffron";
@@ -124,7 +125,7 @@ function PlanCard({ plan, open, onOpen, onClose }: { plan: MembershipPlan; open:
   const m = t.memberships;
   const photo = photoSrc(plan.photo || "portrait");
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-[1.6rem] border border-forest/10 bg-linen">
+    <article id={`plan-${plan.id}`} className="flex h-full scroll-mt-28 flex-col overflow-hidden rounded-[1.6rem] border border-forest/10 bg-linen">
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={photo}
@@ -181,6 +182,29 @@ export default function Memberships() {
       .then((d) => setPlans(d.plans))
       .catch(() => setError(true));
   }, []);
+
+  // Coming from a "buy this card" link (?plan=…): bring that card into view. The intro and the page
+  // curtain can reset or pause scrolling for a moment, so keep trying for a few seconds until the card
+  // is in place, and stop as soon as the visitor scrolls or taps themselves.
+  const linkedPlan = useRef(openId); // only the card from the link, not cards opened later on this page
+  useEffect(() => {
+    const target = linkedPlan.current;
+    if (!plans || !target) return;
+    let stop = false;
+    const cancel = () => (stop = true);
+    const events = ["wheel", "touchstart", "keydown"] as const;
+    events.forEach((e) => window.addEventListener(e, cancel, { passive: true, once: true }));
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      const el = document.getElementById(`plan-${target}`);
+      if (stop || !el || Date.now() - started > 9000) return window.clearInterval(id);
+      if (Math.abs(el.getBoundingClientRect().top - 110) > 40) scrollToElement(el);
+    }, 600);
+    return () => {
+      window.clearInterval(id);
+      events.forEach((e) => window.removeEventListener(e, cancel));
+    };
+  }, [plans]);
 
   const setOpen = (id: string) => setParams(id ? { plan: id } : {}, { replace: true });
 
