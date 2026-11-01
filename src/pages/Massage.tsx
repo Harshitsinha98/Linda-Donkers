@@ -207,7 +207,7 @@ export default function Massage() {
                 <p className="mt-4 max-w-xl text-linen/75">{m.giftText}</p>
               </div>
               <div className="relative">
-                <Button href={waLink(m.giftWa)}>{m.giftCta}</Button>
+                <Button to={ROUTES.gift}>{m.giftCta}</Button>
               </div>
             </div>
           </FadeUp>

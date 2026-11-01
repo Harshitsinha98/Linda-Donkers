@@ -149,6 +149,50 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS memberships_user ON memberships (user_id, status)`,
   `CREATE INDEX IF NOT EXISTS memberships_email ON memberships (email, status)`,
   `CREATE INDEX IF NOT EXISTS memberships_checkout ON memberships (stripe_checkout_id)`,
+  `CREATE TABLE IF NOT EXISTS gift_cards (
+     id                    TEXT PRIMARY KEY,
+     ref                   TEXT NOT NULL UNIQUE,
+     token                 TEXT NOT NULL,
+     code                  TEXT NOT NULL UNIQUE,
+     code_key              TEXT NOT NULL UNIQUE,
+     initial_cents         INTEGER NOT NULL,
+     balance_cents         INTEGER NOT NULL DEFAULT 0,
+     buyer_name            TEXT NOT NULL DEFAULT '',
+     buyer_email           TEXT NOT NULL DEFAULT '',
+     recipient_name        TEXT NOT NULL DEFAULT '',
+     recipient_email       TEXT NOT NULL DEFAULT '',
+     message               TEXT NOT NULL DEFAULT '',
+     lang                  TEXT NOT NULL DEFAULT 'nl',
+     source                TEXT NOT NULL DEFAULT 'web',
+     status                TEXT NOT NULL,
+     expires_at            TEXT,
+     amount_paid_cents     INTEGER NOT NULL DEFAULT 0,
+     refunded_cents        INTEGER NOT NULL DEFAULT 0,
+     stripe_checkout_id    TEXT,
+     stripe_payment_intent TEXT,
+     created_at            TEXT NOT NULL,
+     activated_at          TEXT,
+     cancelled_at          TEXT,
+     CHECK (initial_cents >= 1),
+     CHECK (balance_cents >= 0),
+     CHECK (status IN ('pending','active','expired','cancelled'))
+   )`,
+  `CREATE INDEX IF NOT EXISTS gift_cards_buyer ON gift_cards (buyer_email)`,
+  `CREATE INDEX IF NOT EXISTS gift_cards_recipient ON gift_cards (recipient_email)`,
+  `CREATE INDEX IF NOT EXISTS gift_cards_checkout ON gift_cards (stripe_checkout_id)`,
+  `CREATE TABLE IF NOT EXISTS gift_card_ledger (
+     id             TEXT PRIMARY KEY,
+     gift_card_id   TEXT NOT NULL REFERENCES gift_cards(id),
+     kind           TEXT NOT NULL,
+     amount_cents   INTEGER NOT NULL,
+     balance_after  INTEGER NOT NULL,
+     booking_id     TEXT,
+     membership_id  TEXT,
+     note           TEXT NOT NULL DEFAULT '',
+     created_at     TEXT NOT NULL,
+     CHECK (kind IN ('purchase','redeem','release','refund','adjust','cancel'))
+   )`,
+  `CREATE INDEX IF NOT EXISTS gift_card_ledger_card ON gift_card_ledger (gift_card_id, created_at)`,
 ];
 
 /** Columns added after the first release. ALTER fails harmlessly when the column already exists. */
@@ -165,6 +209,16 @@ const MIGRATIONS = [
   `ALTER TABLE sessions ADD COLUMN availability_rule TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE bookings ADD COLUMN appointment_start_at TEXT`,
   `ALTER TABLE bookings ADD COLUMN appointment_end_at TEXT`,
+  // Gift cards: part of the price paid from a gift card balance (amount_cents stays the Stripe part).
+  `ALTER TABLE bookings ADD COLUMN gift_card_id TEXT`,
+  `ALTER TABLE bookings ADD COLUMN gift_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE bookings ADD COLUMN gift_refunded_cents INTEGER NOT NULL DEFAULT 0`,
+  // 1 when a class-card session went back on the card after a cancellation.
+  `ALTER TABLE bookings ADD COLUMN credit_returned INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE memberships ADD COLUMN gift_card_id TEXT`,
+  `ALTER TABLE memberships ADD COLUMN gift_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE memberships ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE memberships ADD COLUMN gift_refunded_cents INTEGER NOT NULL DEFAULT 0`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };

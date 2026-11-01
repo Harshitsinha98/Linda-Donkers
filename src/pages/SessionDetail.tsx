@@ -5,6 +5,7 @@ import { ROUTES, waLink } from "../data/site";
 import { api, ApiError, fmtEuro, fmtLong, sessionImageSrc, type MembershipView, type PublicSession } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { CouponField, type AppliedCoupon } from "../components/CouponField";
+import { GiftCardField, giftSplit, type AppliedGift } from "../components/GiftCardField";
 import { LoginBox } from "../components/LoginBox";
 import { Arrow } from "../components/Arrow";
 import { FadeUp } from "../components/Reveal";
@@ -43,6 +44,7 @@ function BookingForm({ s }: { s: PublicSession }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [gift, setGift] = useState<AppliedGift | null>(null);
   const [cards, setCards] = useState<MembershipView[]>([]);
   const [cardId, setCardId] = useState("");
   const [showLogin, setShowLogin] = useState(false);
@@ -87,7 +89,10 @@ function BookingForm({ s }: { s: PublicSession }) {
   const useCard = !!cardId && cards.some((c) => c.id === cardId);
   const seats = useCard ? 1 : form.seats;
   const gross = s.priceCents * seats;
-  const total = useCard ? 0 : coupon ? coupon.totalCents : gross;
+  const afterCoupon = useCard ? 0 : coupon ? coupon.totalCents : gross;
+  const split = giftSplit(useCard ? null : gift, afterCoupon);
+  // What is left for Stripe after the discount code and the gift card.
+  const total = split.rest;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +119,7 @@ function BookingForm({ s }: { s: PublicSession }) {
           lang,
           acceptTerms: true,
           couponCode: !useCard && coupon ? coupon.code : "",
+          giftCode: !useCard && gift && split.used > 0 ? gift.code : "",
           membershipId: useCard ? cardId : "",
         }),
       });
@@ -125,8 +131,11 @@ function BookingForm({ s }: { s: PublicSession }) {
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "";
       if (code.startsWith("coupon_")) setCoupon(null);
+      if (code.startsWith("gift_")) setGift(null);
       setError(
-        code.startsWith("coupon_")
+        code.startsWith("gift_")
+          ? (t.gift.errors[code] ?? t.gift.errors.generic)
+          : code.startsWith("coupon_")
           ? (b.couponErrors[code] ?? b.couponErrors.generic)
           : code === "full"
             ? b.errors.full
@@ -286,6 +295,7 @@ function BookingForm({ s }: { s: PublicSession }) {
         {!useCard && gross > 0 && (
           <CouponField target={{ sessionId: s.id, seats, email: form.email.trim() || undefined }} applied={coupon} onChange={setCoupon} />
         )}
+        {!useCard && afterCoupon > 0 && <GiftCardField dueCents={afterCoupon} applied={gift} onChange={setGift} />}
 
         <div className="rounded-2xl bg-sand/60 p-5 text-sm text-forest/80">
           <p className="font-bold text-forest">{b.policyTitle}</p>
@@ -309,9 +319,15 @@ function BookingForm({ s }: { s: PublicSession }) {
               </span>
             </div>
           )}
+          {split.used > 0 && (
+            <div className="mb-2 flex items-baseline justify-between text-sm text-forest/70">
+              <span>{t.gift.field}</span>
+              <span>−{fmtEuro(split.used, lang)}</span>
+            </div>
+          )}
           <div className="flex items-baseline justify-between">
             <span className="text-sm font-bold uppercase tracking-[0.16em] text-sage">{b.total}</span>
-            <span className="font-display text-3xl text-ink">{useCard ? b.oneCredit : total > 0 ? fmtEuro(total, lang) : t.agenda.free}</span>
+            <span className="font-display text-3xl text-ink">{useCard ? b.oneCredit : total > 0 || split.used > 0 ? fmtEuro(total, lang) : t.agenda.free}</span>
           </div>
         </div>
 

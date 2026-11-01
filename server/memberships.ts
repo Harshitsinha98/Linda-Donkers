@@ -13,6 +13,7 @@ import { all, get, run } from "./db.js";
 import { sendMembershipConfirmed } from "./email.js";
 import { HttpError, newId, newRef } from "./http.js";
 import { evaluateCoupon, releaseCoupon, reserveCoupon } from "./coupons.js";
+import { creditCard, recordRedeem, restoreCard, takeFromCard } from "./giftcards.js";
 import { Stripe, stripe, stripeConfigured } from "./stripe.js";
 import { formatEuro, nowIso } from "./time.js";
 import type { SessionRow } from "./sessions.js";
@@ -58,6 +59,10 @@ export type MembershipRow = {
   created_at: string;
   activated_at: string | null;
   cancelled_at: string | null;
+  gift_card_id: string | null;
+  gift_cents: number;
+  refunded_cents: number;
+  gift_refunded_cents: number;
 };
 
 const parseScope = (s: string): string[] => {
@@ -214,6 +219,10 @@ export function membershipView(m: MembershipRow, plan?: PlanRow) {
     expiresAt: m.expires_at,
     createdAt: m.created_at,
     paidOnline: !!m.stripe_payment_intent,
+    giftCents: m.gift_cents ?? 0,
+    refundedCents: m.refunded_cents ?? 0,
+    giftRefundedCents: m.gift_refunded_cents ?? 0,
+    cancelledAt: m.cancelled_at,
   };
 }
 
@@ -225,6 +234,7 @@ export const purchaseInput = z.object({
   phone: z.string().trim().max(40).default(""),
   lang: z.enum(["nl", "en"]).default("nl"),
   couponCode: z.string().trim().max(40).default(""),
+  giftCode: z.string().trim().max(40).default(""),
   acceptTerms: z.literal(true),
 });
 
@@ -244,8 +254,20 @@ export async function startPurchase(user: AuthUser, input: z.infer<typeof purcha
     couponCode = r.coupon.code;
     amount -= discount;
   }
+  let gift: { id: string; cents: number } | null = null;
+  if (input.giftCode && amount > 0) {
+    try {
+      const r = await takeFromCard(input.giftCode, amount);
+      gift = { id: r.card.id, cents: r.takenCents };
+      amount -= r.takenCents;
+    } catch (err) {
+      await releaseCoupon(couponCode);
+      throw err;
+    }
+  }
   if (amount > 0 && !stripeConfigured()) {
     await releaseCoupon(couponCode);
+    if (gift) await restoreCard(gift.id, gift.cents);
     throw new HttpError(503, "payments_unavailable");
   }
 
@@ -257,6 +279,10 @@ export async function startPurchase(user: AuthUser, input: z.infer<typeof purcha
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'web', 'pending', ?)`,
     [id, ref, plan.id, user.id, user.email, input.name, input.phone, input.lang, plan.credits, plan.scope, amount, couponCode, discount, nowIso()],
   );
+  if (gift) {
+    await run(`UPDATE memberships SET gift_card_id = ?, gift_cents = ? WHERE id = ?`, [gift.id, gift.cents, id]);
+    await recordRedeem(gift.id, gift.cents, { membershipId: id });
+  }
 
   if (amount === 0) {
     await activateMembership(id, null, base);
@@ -280,6 +306,7 @@ export async function startPurchase(user: AuthUser, input: z.infer<typeof purcha
                   plan.credits ? `${plan.credits}×` : "",
                   `${plan.validity_days} ${input.lang === "en" ? "days" : "dagen"}`,
                   couponCode ? `${couponCode} −${formatEuro(discount, input.lang)}` : "",
+                  gift ? `${input.lang === "en" ? "Gift card" : "Cadeaubon"} −${formatEuro(gift.cents, input.lang)}` : "",
                 ].filter(Boolean).join(" · "),
               },
             },
@@ -320,6 +347,11 @@ export async function activateMembership(id: string, paymentIntent: string | nul
     [now.toISOString(), new Date(now.getTime() + days * 86_400_000).toISOString(), now.toISOString(), paymentIntent, id],
   );
   if (!changed) return;
+  if (m.status === "expired" && m.gift_card_id && m.gift_cents > 0) {
+    const ok = await run(`UPDATE gift_cards SET balance_cents = balance_cents - ? WHERE id = ? AND balance_cents >= ?`, [m.gift_cents, m.gift_card_id, m.gift_cents]);
+    if (ok) await recordRedeem(m.gift_card_id, m.gift_cents, { membershipId: m.id });
+    else console.warn(`[giftcard] ${m.ref}: late payment, gift card balance already used elsewhere`);
+  }
   const updated = (await getMembership(id))!;
   await sendMembershipConfirmed(updated, plan, base);
 }
@@ -328,6 +360,7 @@ async function expirePending(id: string) {
   const m = await getMembership(id);
   const changed = await run(`UPDATE memberships SET status = 'expired' WHERE id = ? AND status = 'pending'`, [id]);
   if (changed && m?.coupon_code) await releaseCoupon(m.coupon_code);
+  if (changed && m?.gift_card_id) await creditCard(m.gift_card_id, m.gift_cents, "release", { membershipId: m.id, note: "Checkout not completed" });
 }
 
 const intentId = (cs: Stripe.Checkout.Session) =>
@@ -470,6 +503,11 @@ export async function cancelMembership(id: string, refund: boolean) {
       throw new HttpError(502, "refund_failed", `Stripe refund failed: ${(err as Error).message}`);
     }
   }
-  await run(`UPDATE memberships SET status = 'cancelled', cancelled_at = ? WHERE id = ?`, [nowIso(), m.id]);
-  return { refundedCents: refunded };
+  const giftBack = refund && m.gift_card_id ? Math.max(0, m.gift_cents - m.gift_refunded_cents) : 0;
+  await run(
+    `UPDATE memberships SET status = 'cancelled', cancelled_at = ?, refunded_cents = refunded_cents + ?, gift_refunded_cents = gift_refunded_cents + ? WHERE id = ?`,
+    [nowIso(), refunded, giftBack, m.id],
+  );
+  if (giftBack) await creditCard(m.gift_card_id, giftBack, "refund", { membershipId: m.id, note: `Cancelled ${m.ref}` });
+  return { refundedCents: refunded, giftRefundCents: giftBack };
 }
