@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Book · Linda Donkers (prototype)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap section" id="booking">
+    <span class="eyebrow">Book</span>
+    <h1>Book a session</h1>
+    <p class="oneliner"><b>How it works:</b> choose your massage, tap a free day and time, fill in your name and pay.</p>
+
+    <div class="book-layout">
+      <div>
+        <section class="book-step">
+          <h2><span class="n">1</span> What would you like?</h2>
+          <div class="tabs" id="tabs" role="tablist" aria-label="Type"></div>
+          <div id="items" role="radiogroup" aria-label="Treatment"></div>
+        </section>
+
+        <section class="book-step">
+          <h2><span class="n">2</span> Pick a free day and time</h2>
+          <div class="nextfree" id="nextfree"></div>
+          <div class="cal-head">
+            <button type="button" id="cal-prev" aria-label="Previous month">‹</button>
+            <strong id="cal-title"></strong>
+            <button type="button" id="cal-next" aria-label="Next month">›</button>
+          </div>
+          <div class="cal" id="cal"></div>
+          <div class="legend">
+            <span><i style="background:var(--free)"></i>Free time</span>
+            <span><i style="background:var(--full)"></i>Fully booked</span>
+            <span><i style="border:1px solid var(--line)"></i>Linda not working</span>
+          </div>
+          <div id="times-wrap" style="margin-top:18px">
+            <b id="times-title"></b>
+            <div class="times" id="times"></div>
+          </div>
+        </section>
+
+        <section class="book-step" id="details">
+          <h2><span class="n">3</span> Your details</h2>
+          <form id="book-form">
+            <label class="field">Name<input id="f-name" required autocomplete="name"></label>
+            <label class="field">Email<input type="email" required autocomplete="email"></label>
+            <label class="field">Phone (for WhatsApp)<input type="tel" required autocomplete="tel" placeholder="+32"></label>
+            <label class="field">Anything Linda should know? (optional)<textarea rows="2"></textarea></label>
+
+            <button type="button" class="linkish" id="code-toggle">Have a gift card or discount code?</button>
+            <div id="code-area" hidden>
+              <div class="codebox">
+                <input id="code" placeholder="Code" aria-label="Gift card or discount code">
+                <button type="button" class="btn btn-sm btn-dark" id="code-apply">Use</button>
+              </div>
+              <p class="msg" id="code-msg" aria-live="polite"></p>
+            </div>
+
+            <label class="check"><input type="checkbox" required> <span>I agree to the cancellation rules: free cancellation up to 48 hours before, 50% back between 24 and 48 hours.</span></label>
+            <button class="btn btn-accent btn-big btn-block" id="pay" type="submit">Pay</button>
+            <p class="small muted center" style="margin-top:8px">Pay with Bancontact, card, Apple Pay or Google Pay. No account needed.</p>
+          </form>
+        </section>
+      </div>
+
+      <aside class="card summary">
+        <h3>Your booking</h3>
+        <div id="summary-body"></div>
+        <p class="small muted" style="margin-top:12px">Questions first? <a data-wa="Hello Linda, I have a question about booking." href="#">WhatsApp Linda</a></p>
+      </aside>
+    </div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
