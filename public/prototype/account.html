@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>My account · Linda Donkers (prototype)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap section">
+    <span class="eyebrow">My account</span>
+    <h1>My account</h1>
+    <p class="todo-box">You don't need an account to book. The account is only for people with a package, class card or gift card, so they can see what's left. In this demo the login buttons just show an example.</p>
+
+    <div id="login" class="card stack" style="max-width:420px;margin-top:20px">
+      <button class="btn btn-block" type="button">Continue with Google</button>
+      <button class="btn btn-block" type="button">Email me a login link</button>
+    </div>
+
+    <div id="account" hidden style="margin-top:20px">
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>My bookings</h3>
+          <div class="list-item"><span>Lomi Lomi Nui, 90 min<br><span class="small muted">Thu 3 Dec, 10:00</span></span><button class="linkish" type="button">Cancel</button></div>
+          <div class="list-item"><span>Group class, Kundalini Yoga<br><span class="small muted">Mon 7 Dec, 19:30</span></span><button class="linkish" type="button">Cancel</button></div>
+        </div>
+        <div class="card">
+          <h3>My package</h3>
+          <div class="list-item"><span>3 massages + 1 free yoga class</span><b>2 massages + 1 class left</b></div>
+          <a class="btn btn-accent btn-sm" style="margin-top:12px" href="booking.html?type=massage">Book with my package</a>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="app.js"></script>
+  <script>
+    document.querySelectorAll("#login button").forEach((b) =>
+      b.addEventListener("click", () => {
+        document.getElementById("login").hidden = true;
+        document.getElementById("account").hidden = false;
+      }),
+    );
+  </script>
+</body>
+</html>
