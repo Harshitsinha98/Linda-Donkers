@@ -7,7 +7,7 @@
  * and scope at purchase time, so later edits to the plan never change what someone bought.
  */
 import { z } from "zod";
-import { DEFAULT_PLANS, expandScope, OFFERING_GROUPS, OFFERINGS, PHOTO_KEYS, SECTIONS, sectionOf } from "../shared/catalog.js";
+import { DEFAULT_PLANS, expandScope, OFFERING_GROUPS, OFFERINGS, PACKAGE_PLANS, PHOTO_KEYS, SECTIONS, sectionOf } from "../shared/catalog.js";
 import type { AuthUser } from "./auth.js";
 import { all, get, run } from "./db.js";
 import { sendMembershipConfirmed } from "./email.js";
@@ -154,11 +154,13 @@ export function planPublic(p: PlanRow) {
 export const getPlan = (id: string) => get<PlanRow>(`SELECT * FROM membership_plans WHERE id = ?`, [id]);
 
 export async function listPlansPublic() {
+  await ensureStandardPackages();
   const rows = await all<PlanRow>(`SELECT * FROM membership_plans WHERE status = 'active' ORDER BY sort ASC, created_at ASC`);
   return rows.map(planPublic);
 }
 
 export async function listPlansAdmin() {
+  await ensureStandardPackages();
   const rows = await all<PlanRow & { sold: number; revenue: number }>(
     `SELECT p.*,
        (SELECT COUNT(*) FROM memberships m WHERE m.plan_id = p.id AND m.status IN ('active','expired')) AS sold,
@@ -211,6 +213,45 @@ export async function seedDefaultPlans(): Promise<number> {
     created++;
   }
   return created;
+}
+
+const PACKAGES_SEEDED = "seed:packages-v1";
+let packagesChecked = false; // per server instance, so most requests skip the check
+
+/**
+ * Puts the standard packages (3 massages + 1 free yoga class, 5 massages + 1 free healing) on sale, once,
+ * so the "Buy" buttons work without anyone pressing a button in the admin. After that Linda is in charge:
+ * if she hides, edits or deletes a package it is NOT added again (the "Add missing standard cards" button
+ * in the admin still can). The claim is a single atomic insert, so two visitors arriving at the same moment
+ * can't create duplicates. A package she already has (same name, or same number of sessions with a free
+ * session) is left alone.
+ */
+async function ensureStandardPackages() {
+  if (packagesChecked) return;
+  try {
+    const done = await get<{ value: string }>(`SELECT value FROM _meta WHERE key = ?`, [PACKAGES_SEEDED]).catch(() => undefined);
+    if (!done) {
+      await run(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+      const claimed = await run(`INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`, [PACKAGES_SEEDED, nowIso()]);
+      if (claimed) {
+        try {
+          const rows = await all<{ name_nl: string; credits: number; bonus_credits: number }>(
+            `SELECT name_nl, credits, bonus_credits FROM membership_plans WHERE status <> 'archived'`,
+          );
+          for (const [i, p] of PACKAGE_PLANS.entries()) {
+            const have = rows.some((r) => r.name_nl.trim().toLowerCase() === p.nameNl.trim().toLowerCase() || (r.bonus_credits > 0 && r.credits === p.credits));
+            if (!have) await createPlan({ ...p, bonusCredits: p.bonusCredits ?? 0, bonusScope: p.bonusScope ?? [], sort: 100 + i, status: "active" });
+          }
+        } catch (err) {
+          await run(`DELETE FROM _meta WHERE key = ?`, [PACKAGES_SEEDED]); // try again on the next request
+          throw err;
+        }
+      }
+    }
+    packagesChecked = true;
+  } catch (err) {
+    console.error("[membership] could not add the standard packages", err);
+  }
 }
 
 /**

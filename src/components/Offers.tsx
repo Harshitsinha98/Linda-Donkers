@@ -30,8 +30,9 @@ export function MassagePrices({ treatment, light = false }: { treatment?: string
 }
 
 /**
- * The massage packages. When Linda has the matching card on sale (admin → Memberships), the
- * button goes straight to it; otherwise it opens WhatsApp with a ready message.
+ * The massage packages. The button goes straight to the matching card on the class cards page
+ * (it is added automatically, see server/memberships.ts). While the cards are loading it goes to
+ * that page's overview. Only when Linda has taken the package off sale does it fall back to WhatsApp.
  */
 export function PackageCards({ only }: { only?: string }) {
   const { t, lang } = useLang();
@@ -41,7 +42,8 @@ export function PackageCards({ only }: { only?: string }) {
   return (
     <div className={`grid gap-6 ${list.length > 1 ? "md:grid-cols-2" : ""}`}>
       {list.map((p, i) => {
-        const plan = planFor(plans, "massage-90", p.credits);
+        // The package itself (with its free session), not a plain card with the same number of sessions.
+        const plan = planFor(plans?.filter((x) => x.bonusCredits > 0) ?? null, "massage-90", p.credits);
         const price = plan ? plan.priceCents : p.priceCents;
         const cls =
           "inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[0.8rem] font-bold uppercase tracking-[0.16em] transition-colors duration-300";
@@ -53,7 +55,7 @@ export function PackageCards({ only }: { only?: string }) {
               <p className={`mt-3 flex-1 ${i === 0 ? "text-linen/75" : "text-forest/70"}`}>{p.text}</p>
               <p className="mt-6 font-display text-4xl">{fmtEuro(price, lang)}</p>
               <div className="mt-6">
-                {plan ? (
+                {plan || plans === null ? (
                   <Link to={planLink(plan)} className={`${cls} ${i === 0 ? "bg-saffron text-linen hover:bg-linen hover:text-ink" : "bg-saffron text-linen hover:bg-forest"}`}>
                     {o.packageCta} <Arrow className="h-4 w-4" />
                   </Link>
@@ -64,7 +66,7 @@ export function PackageCards({ only }: { only?: string }) {
                     rel="noreferrer"
                     className={`${cls} ${i === 0 ? "bg-saffron text-linen hover:bg-linen hover:text-ink" : "bg-saffron text-linen hover:bg-forest"}`}
                   >
-                    {plans === null ? o.packageCta : o.packageAsk} <Arrow className="h-4 w-4" />
+                    {o.packageAsk} <Arrow className="h-4 w-4" />
                   </a>
                 )}
               </div>
