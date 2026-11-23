@@ -12,6 +12,8 @@ import {
   sessionInput,
   updateSession,
   syncMissingStandard,
+  setAvailabilityMany,
+  availabilityInput,
 } from "../../server/sessions.js";
 
 /** GET /api/admin/sessions?scope=upcoming|past */
@@ -29,6 +31,8 @@ const postBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("previewStandard"), weeks: z.number().int().min(1).max(26).default(8) }),
   z.object({ action: z.literal("createMissingStandard"), weeks: z.number().int().min(1).max(26).default(8) }),
   // Deletes all sessions without live bookings and creates Linda's standard schedule.
+  // Same weekly hours for several massages/healings at once (e.g. all massages: Tue/Thu/Sat 10:00 and 14:00).
+  z.object({ action: z.literal("setAvailability"), ids: z.array(z.string().min(1)).min(1).max(50), availability: availabilityInput }),
   z.object({ action: z.literal("reset"), weeks: z.number().int().min(1).max(26).default(8), confirm: z.literal("RESET") }),
 ]);
 
@@ -57,6 +61,8 @@ export const POST = handler(async (req) => {
       return json({ ok: true, ...(await syncMissingStandard(body.weeks, true)) });
     case "createMissingStandard":
       return json({ ok: true, ...(await syncMissingStandard(body.weeks, false)) });
+    case "setAvailability":
+      return json({ ok: true, results: await setAvailabilityMany(body.ids, body.availability) });
     case "reset": {
       const result = await resetToStandard(body.weeks);
       const plansCreated = await seedDefaultPlans();
