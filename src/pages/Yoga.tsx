@@ -93,7 +93,7 @@ export default function Yoga() {
               </FadeUp>
             </div>
             <FadeUp delay={0.15}>
-              <Link to={`${ROUTES.agenda}?cat=yoga`} className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-saffron hover:text-forest">
+              <Link to={`${ROUTES.book}?cat=yoga`} className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-saffron hover:text-forest">
                 {y.offerNote} <Arrow className="h-4 w-4" />
               </Link>
             </FadeUp>
@@ -107,7 +107,7 @@ export default function Yoga() {
                     {y.askCta} <Arrow className="h-3.5 w-3.5" />
                   </Link>
                 ) : (
-                  <Link to={`${ROUTES.agenda}?cat=yoga${o.action === "bookOnline" ? "&online=1" : ""}`} className={OFFER_CTA}>
+                  <Link to={`${ROUTES.book}?cat=${o.action === "bookOnline" ? "online" : "yoga"}`} className={OFFER_CTA}>
                     {y.bookCta} <Arrow className="h-3.5 w-3.5" />
                   </Link>
                 );

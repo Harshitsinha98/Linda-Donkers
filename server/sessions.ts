@@ -598,30 +598,53 @@ function intervalsOverlap(a: BusyInterval, b: BusyInterval): boolean {
   return a.startsAt < b.endsAt && a.endsAt > b.startsAt;
 }
 
-/** Returns only configured weekly slots that are free across Linda's whole calendar. */
-export async function getAvailableAppointmentSlots(sessionId: string, dateValue: string): Promise<AvailableAppointmentSlot[]> {
+/** Longest range the calendar may ask for in one request (about two months). */
+export const MAX_CALENDAR_DAYS = 62;
+
+/**
+ * Free start times for every bookable day between `fromDate` and `toDate` (inclusive), checked
+ * against Linda's whole calendar. Days Linda works on are always present (an empty list = fully
+ * booked); days she doesn't work on are left out. One pair of queries covers the whole range.
+ */
+export async function getAvailableAppointmentSlotsInRange(
+  sessionId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<Record<string, AvailableAppointmentSlot[]>> {
   const s = await getSessionRow(sessionId);
   const rule = s ? parseAvailability(s.availability_rule) : null;
   if (!s || s.status !== "published" || s.booking_mode !== "appointment" || !rule) {
     throw new HttpError(409, "availability_not_configured");
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateValue) || dateValue < todayBE() || !isRecurringDate(dateValue, s.date, rule)) {
-    return [];
+  const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!isDate(fromDate) || !isDate(toDate)) return {};
+
+  const today = todayBE();
+  const first = fromDate < today ? today : fromDate;
+  const last = toDate > s.date ? s.date : toDate;
+  const days: string[] = [];
+  for (let d = first; d <= last && days.length <= MAX_CALENDAR_DAYS; d = addDays(d, 1)) {
+    if (isRecurringDate(d, s.date, rule)) days.push(d);
   }
+  const result: Record<string, AvailableAppointmentSlot[]> = Object.fromEntries(days.map((d) => [d, []]));
+  if (days.length === 0) return result;
 
   const now = Date.now();
-  const candidates = rule.slotTimes.map((timeValue) => {
-    const start = zonedToUtc(dateValue, timeValue).getTime();
-    const end = start + s.duration_min * 60_000;
-    return {
-      time: timeValue,
-      startsAt: new Date(start).toISOString(),
-      endsAt: new Date(end).toISOString(),
-      busy: { startsAt: start, endsAt: end + rule.bufferMinutes * 60_000 },
-    };
-  }).filter((slot) => slot.busy.startsAt > now);
+  const candidates = days.flatMap((day) =>
+    rule.slotTimes.map((timeValue) => {
+      const start = zonedToUtc(day, timeValue).getTime();
+      const end = start + s.duration_min * 60_000;
+      return {
+        day,
+        time: timeValue,
+        startsAt: new Date(start).toISOString(),
+        endsAt: new Date(end).toISOString(),
+        busy: { startsAt: start, endsAt: end + rule.bufferMinutes * 60_000 },
+      };
+    }),
+  ).filter((slot) => slot.busy.startsAt > now);
 
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) return result;
 
   const minStart = Math.min(...candidates.map((x) => x.busy.startsAt)) - 86_400_000;
   const maxEnd = Math.max(...candidates.map((x) => x.busy.endsAt)) + 86_400_000;
@@ -661,14 +684,19 @@ export async function getAvailableAppointmentSlots(sessionId: string, dateValue:
       return { startsAt: start, endsAt: start + x.duration_min * 60_000 };
     });
 
-  return candidates
-    .filter((slot) => {
-      const busy = slot.busy;
-      if (bookingIntervals.some((x) => intervalsOverlap(busy, x))) return false;
-      if (fixedIntervals.some((x) => intervalsOverlap(busy, x))) return false;
-      return true;
-    })
-    .map(({ time: timeValue, startsAt, endsAt }) => ({ time: timeValue, startsAt, endsAt }));
+  for (const slot of candidates) {
+    const busy = slot.busy;
+    if (bookingIntervals.some((x) => intervalsOverlap(busy, x))) continue;
+    if (fixedIntervals.some((x) => intervalsOverlap(busy, x))) continue;
+    result[slot.day].push({ time: slot.time, startsAt: slot.startsAt, endsAt: slot.endsAt });
+  }
+  return result;
+}
+
+/** Returns only configured weekly slots that are free across Linda's whole calendar. */
+export async function getAvailableAppointmentSlots(sessionId: string, dateValue: string): Promise<AvailableAppointmentSlot[]> {
+  const byDay = await getAvailableAppointmentSlotsInRange(sessionId, dateValue, dateValue);
+  return byDay[dateValue] ?? [];
 }
 
 /** Re-checks a customer-selected slot immediately before checkout and returns canonical UTC times. */

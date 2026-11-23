@@ -220,6 +220,11 @@ const MIGRATIONS = [
   `ALTER TABLE memberships ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE memberships ADD COLUMN gift_refunded_cents INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE gift_cards ADD COLUMN for_self INTEGER NOT NULL DEFAULT 0`,
+  // Packages with a free extra session (e.g. 3 massages + 1 free yoga class).
+  `ALTER TABLE membership_plans ADD COLUMN bonus_credits INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE membership_plans ADD COLUMN bonus_scope TEXT NOT NULL DEFAULT '[]'`,
+  // Set on the free card that came with a package: the id of the paid membership.
+  `ALTER TABLE memberships ADD COLUMN bonus_of TEXT`,
 ];
 
 const g = globalThis as unknown as { __ldDb?: Promise<Client> };

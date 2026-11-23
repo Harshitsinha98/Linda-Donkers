@@ -21,7 +21,7 @@ export function CtaStrip() {
         <FadeUp delay={0.3}>
           <p className="mx-auto mt-6 max-w-md text-lg text-linen/70">{t.cta.text}</p>
           <div className="mt-10 flex flex-col items-center gap-5">
-            <Button to={ROUTES.agenda}>{t.cta.button}</Button>
+            <Button to={ROUTES.book}>{t.cta.button}</Button>
             <Link to={ROUTES.contact} className="text-sm font-semibold text-linen/70 underline underline-offset-4 hover:text-saffron-soft">
               {t.cta.secondary}
             </Link>

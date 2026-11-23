@@ -86,7 +86,7 @@ export default function BookingStatus() {
           </div>
         ) : b.status === "expired" ? (
           <Message title={st.expiredTitle} text={st.expiredText}>
-            <Button to={`${ROUTES.agenda}/${s.id}`}>{st.tryAgain}</Button>
+            <Button to={`${ROUTES.book}?id=${encodeURIComponent(s.id)}`}>{st.tryAgain}</Button>
           </Message>
         ) : (
           <>
@@ -191,7 +191,7 @@ export default function BookingStatus() {
             )}
 
             <div className="mt-10">
-              <Link to={ROUTES.agenda} className="font-semibold text-forest underline underline-offset-4 hover:text-saffron">
+              <Link to={ROUTES.book} className="font-semibold text-forest underline underline-offset-4 hover:text-saffron">
                 {st.agenda}
               </Link>
             </div>
@@ -219,7 +219,7 @@ function Message({ title, text, children }: { title: string; text?: string; chil
       {text && <p className="lead mt-5">{text}</p>}
       <div className="mt-10 flex flex-wrap gap-4">
         {children}
-        <Button to={ROUTES.agenda} variant="ghost">
+        <Button to={ROUTES.book} variant="ghost">
           {t.booking.status.agenda}
         </Button>
       </div>

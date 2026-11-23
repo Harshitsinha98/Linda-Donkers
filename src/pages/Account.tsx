@@ -278,7 +278,7 @@ export default function Account() {
               </>
             )}
             <div className="mt-10 flex flex-wrap gap-4">
-              <Button to={ROUTES.agenda}>{a.bookNow}</Button>
+              <Button to={ROUTES.book}>{a.bookNow}</Button>
               <Button to={ROUTES.gift} variant="ghost">
                 {t.gift.cta}
               </Button>

@@ -135,7 +135,42 @@ export const OFFERINGS: Offering[] = [
     titleEn: "Taoïstic belly & organ massage (Chi Nei Tsang)",
     descriptionNl: "Een helende massage gecombineerd met drukpunttherapie. Weldadig bij spijsverteringsproblemen en voor de bloedcirculatie." + APPT_NL,
     descriptionEn: "A healing massage combined with pressure point therapy. Beneficial for digestive problems and blood circulation." + APPT_EN,
-    isOnline: false, durationMin: 60, priceCents: 9000, capacity: 1, maxPerBooking: 1,
+    isOnline: false, durationMin: 60, priceCents: 10000, capacity: 1, maxPerBooking: 1,
+    photo: "lomi2",
+  },
+  // 60- and 90-minute versions of the massages (Linda: 60 min €100, 90 min €140). Titles start
+  // differently from the originals on purpose, so the standard-schedule sync never mixes them up.
+  {
+    key: "mer-60",
+    section: "massage",
+    category: "massage",
+    titleNl: "M.E.R. 60 min · Myo Fascia Energetic Release",
+    titleEn: "M.E.R. 60 min · Myo Fascia Energetic Release",
+    descriptionNl: "Therapeutische massage van 60 minuten: diep fasciawerk, ideaal bij chronische pijn en om je houding te verbeteren.",
+    descriptionEn: "60-minute therapy massage: deep fascia work, ideal for chronic pain and improving posture.",
+    isOnline: false, durationMin: 60, priceCents: 10000, capacity: 1, maxPerBooking: 1,
+    photo: "lomi3",
+  },
+  {
+    key: "lomi-60",
+    section: "massage",
+    category: "massage",
+    titleNl: "Lomi Lomi Nui 60 min · Hawaiiaanse oliemassage",
+    titleEn: "Lomi Lomi Nui 60 min · Hawaiian oil massage",
+    descriptionNl: "Een hartopenende Hawaiiaanse oliemassage van 60 minuten, met lange strijkbewegingen als de golven van de zee.",
+    descriptionEn: "A heart-opening 60-minute Hawaiian oil massage, with long strokes like the waves of the sea.",
+    isOnline: false, durationMin: 60, priceCents: 10000, capacity: 1, maxPerBooking: 1,
+    photo: "lomi1",
+  },
+  {
+    key: "chinei-90",
+    section: "massage",
+    category: "massage",
+    titleNl: "Chi Nei Tsang 90 min · Taoïstische buik- & orgaanmassage",
+    titleEn: "Chi Nei Tsang 90 min · Taoïstic belly & organ massage",
+    descriptionNl: "Een helende buikmassage van 90 minuten, gecombineerd met drukpunttherapie. Weldadig voor de spijsvertering en de bloedcirculatie.",
+    descriptionEn: "A healing 90-minute belly massage combined with pressure point therapy. Beneficial for digestion and blood circulation.",
+    isOnline: false, durationMin: 90, priceCents: 14000, capacity: 1, maxPerBooking: 1,
     photo: "lomi2",
   },
   {
@@ -195,6 +230,11 @@ export const OFFERING_GROUPS: { key: string; label: string; offerings: string[] 
   { key: "mer", label: "M.E.R. Myo Fascia Energetic Release", offerings: ["mer"] },
   { key: "lomi", label: "Lomi Lomi Nui", offerings: ["lomi"] },
   { key: "chinei", label: "Chi Nei Tsang", offerings: ["chinei"] },
+  { key: "mer-60", label: "M.E.R. 60 min", offerings: ["mer-60"] },
+  { key: "lomi-60", label: "Lomi Lomi Nui 60 min", offerings: ["lomi-60"] },
+  { key: "chinei-90", label: "Chi Nei Tsang 90 min", offerings: ["chinei-90"] },
+  { key: "massage-90", label: "Any 90-minute massage (M.E.R., Lomi Lomi, Chi Nei Tsang)", offerings: ["mer", "lomi", "chinei-90"] },
+  { key: "massage-60", label: "Any 60-minute massage (M.E.R., Lomi Lomi, Chi Nei Tsang)", offerings: ["mer-60", "lomi-60", "chinei"] },
   { key: "satnam", label: "Sat Nam Rasayan healing (live & online)", offerings: ["satnam-live", "satnam-online"] },
 ];
 
@@ -219,6 +259,9 @@ export type PlanSeed = {
   validityDays: number;
   scope: string[];
   photo: PhotoKey;
+  /** Free extra sessions that come with the card, e.g. 1 yoga class with 3 massages. 0 = none. */
+  bonusCredits?: number;
+  bonusScope?: string[];
 };
 
 /** Linda's session cards, created as membership plans. */
@@ -244,7 +287,33 @@ export const DEFAULT_PLANS: PlanSeed[] = [
     descriptionEn: "5 Hawaiian oil massages of 90 minutes. Valid for one year from purchase.",
     priceCents: 60000, credits: 5, validityDays: 365, scope: ["lomi"], photo: "lomi1",
   },
+  {
+    nameNl: "3 massages + 1 gratis Kundalini Yoga les",
+    nameEn: "3 massages + 1 free Kundalini Yoga class",
+    descriptionNl: "3 massages van 90 minuten naar keuze (M.E.R., Lomi Lomi Nui of Chi Nei Tsang) en een Kundalini Yoga groepsles cadeau. Een jaar geldig.",
+    descriptionEn: "3 massages of 90 minutes of your choice (M.E.R., Lomi Lomi Nui or Chi Nei Tsang) and a Kundalini Yoga group class as a gift. Valid for one year.",
+    priceCents: 42000, credits: 3, validityDays: 365, scope: ["massage-90"], photo: "lomi1",
+    bonusCredits: 1, bonusScope: ["yoga-group"],
+  },
+  {
+    nameNl: "5 massages + 1 gratis Sat Nam Rasayan healing",
+    nameEn: "5 massages + 1 free Sat Nam Rasayan healing",
+    descriptionNl: "5 massages van 90 minuten naar keuze en een Sat Nam Rasayan healing cadeau, live of online. Een jaar geldig.",
+    descriptionEn: "5 massages of 90 minutes of your choice and a Sat Nam Rasayan healing as a gift, live or online. Valid for one year.",
+    priceCents: 60000, credits: 5, validityDays: 365, scope: ["massage-90"], photo: "lomi3",
+    bonusCredits: 1, bonusScope: ["satnam"],
+  },
 ];
+
+/**
+ * Groups the 60- and 90-minute versions of one treatment (and the weekly slots of one class),
+ * so the booking page shows "Lomi Lomi Nui" once with a choice of duration.
+ */
+export function treatmentKey(offering: string): string {
+  const base = offering.replace(/-(60|90)$/, "");
+  const group = OFFERING_GROUPS.find((g) => g.offerings.includes(base) && !g.key.startsWith("massage-"));
+  return group ? group.key : base;
+}
 
 /** Section on the website for a session: online first, then by category. */
 export function sectionOf(s: { category: string; isOnline: boolean }): Section | "other" {

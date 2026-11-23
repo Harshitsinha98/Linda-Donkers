@@ -33,6 +33,8 @@ export type PlanRow = {
   status: "active" | "hidden" | "archived";
   created_at: string;
   updated_at: string;
+  bonus_credits: number;
+  bonus_scope: string;
 };
 
 export type MembershipRow = {
@@ -63,6 +65,7 @@ export type MembershipRow = {
   gift_cents: number;
   refunded_cents: number;
   gift_refunded_cents: number;
+  bonus_of: string | null;
 };
 
 const parseScope = (s: string): string[] => {
@@ -107,6 +110,12 @@ export const planInput = z.object({
   photo: z.union([z.literal(""), z.enum(PHOTO_KEYS)]).default(""),
   sort: z.number().int().min(0).max(1000).default(0),
   status: z.enum(["active", "hidden"]).default("active"),
+  // Free extra sessions on a separate card, e.g. 1 yoga class with a massage package.
+  bonusCredits: z.number().int().min(0).max(20).default(0),
+  bonusScope: z.array(z.enum(SCOPE_KEYS as [string, ...string[]])).default([]),
+}).refine((p) => p.bonusCredits === 0 || p.bonusScope.length > 0, {
+  path: ["bonusScope"],
+  message: "Choose which sessions the free extra session can be used for.",
 });
 export type PlanInput = z.infer<typeof planInput>;
 
@@ -122,6 +131,8 @@ const planCols = (p: PlanInput) => ({
   photo: p.photo,
   sort: p.sort,
   status: p.status,
+  bonus_credits: p.bonusCredits,
+  bonus_scope: JSON.stringify(p.bonusCredits > 0 ? [...new Set(p.bonusScope)] : []),
 });
 
 export function planPublic(p: PlanRow) {
@@ -135,6 +146,8 @@ export function planPublic(p: PlanRow) {
     scope: parseScope(p.scope),
     photo: p.photo,
     status: p.status,
+    bonusCredits: p.bonus_credits ?? 0,
+    bonusScope: parseScope(p.bonus_scope ?? "[]"),
   };
 }
 
@@ -184,24 +197,64 @@ export async function deletePlan(id: string) {
   return { archived: false };
 }
 
-/** Creates Linda's standard session cards when there are no plans yet. */
+/**
+ * Creates Linda's standard session cards and packages that don't exist yet (matched on the Dutch
+ * name). Existing cards are never changed, so prices Linda edited herself stay as they are.
+ */
 export async function seedDefaultPlans(): Promise<number> {
-  const existing = await get<{ n: number }>(`SELECT COUNT(*) AS n FROM membership_plans WHERE status <> 'archived'`);
-  if (existing && existing.n > 0) return 0;
-  let i = 0;
-  for (const p of DEFAULT_PLANS) await createPlan({ ...p, sort: i++, status: "active" });
-  return DEFAULT_PLANS.length;
+  const rows = await all<{ name_nl: string }>(`SELECT name_nl FROM membership_plans WHERE status <> 'archived'`);
+  const have = new Set(rows.map((r) => r.name_nl.trim().toLowerCase()));
+  let created = 0;
+  for (const [i, p] of DEFAULT_PLANS.entries()) {
+    if (have.has(p.nameNl.trim().toLowerCase())) continue;
+    await createPlan({ ...p, bonusCredits: p.bonusCredits ?? 0, bonusScope: p.bonusScope ?? [], sort: i, status: "active" });
+    created++;
+  }
+  return created;
+}
+
+/**
+ * The free extra card that comes with a package. Same holder and end date as the paid card,
+ * no payment of its own. Idempotent: never creates a second one for the same membership.
+ */
+async function grantBonus(m: MembershipRow, plan: PlanRow | undefined) {
+  try {
+    await insertBonus(m, plan);
+  } catch (err) {
+    // Never block the paid card or its email; Linda can add the free session by hand.
+    console.error(`[membership] ${m.ref}: free extra session could not be added`, err);
+  }
+}
+
+async function insertBonus(m: MembershipRow, plan: PlanRow | undefined) {
+  if (!plan || !(plan.bonus_credits > 0) || m.bonus_of) return;
+  const scope = parseScope(plan.bonus_scope);
+  if (scope.length === 0) return;
+  const exists = await get<{ n: number }>(`SELECT COUNT(*) AS n FROM memberships WHERE bonus_of = ?`, [m.id]);
+  if (exists && exists.n > 0) return;
+  const now = nowIso();
+  await run(
+    `INSERT INTO memberships (id, ref, plan_id, user_id, email, name, phone, lang, credits_total, scope, amount_cents, source, status,
+       starts_at, expires_at, created_at, activated_at, bonus_of)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'active', ?, ?, ?, ?, ?)`,
+    [
+      newId(), `${m.ref}-B`, plan.id, m.user_id, m.email, m.name, m.phone, m.lang, plan.bonus_credits, JSON.stringify(scope), m.source,
+      m.starts_at ?? now, m.expires_at, now, now, m.id,
+    ],
+  );
 }
 
 /* ---------------- views ---------------- */
 
 export function membershipView(m: MembershipRow, plan?: PlanRow) {
   const status = effectiveStatus(m);
+  const planName = plan ? { nl: plan.name_nl, en: plan.name_en || plan.name_nl } : { nl: "Membership", en: "Membership" };
   return {
     id: m.id,
     ref: m.ref,
     planId: m.plan_id,
-    name: plan ? { nl: plan.name_nl, en: plan.name_en || plan.name_nl } : { nl: "Membership", en: "Membership" },
+    name: m.bonus_of ? { nl: `Cadeau bij: ${planName.nl}`, en: `Gift with: ${planName.en}` } : planName,
+    bonusOf: m.bonus_of ?? null,
     photo: plan?.photo ?? "",
     holder: m.name,
     email: m.email,
@@ -353,6 +406,7 @@ export async function activateMembership(id: string, paymentIntent: string | nul
     else console.warn(`[giftcard] ${m.ref}: late payment, gift card balance already used elsewhere`);
   }
   const updated = (await getMembership(id))!;
+  await grantBonus(updated, plan);
   await sendMembershipConfirmed(updated, plan, base);
 }
 
@@ -468,7 +522,9 @@ export async function grantMembership(input: z.infer<typeof grantInput>, base: s
       now.toISOString(), new Date(now.getTime() + plan.validity_days * 86_400_000).toISOString(), now.toISOString(), now.toISOString(),
     ],
   );
-  if (input.sendEmail) await sendMembershipConfirmed((await getMembership(id))!, plan, base);
+  const granted = (await getMembership(id))!;
+  await grantBonus(granted, plan);
+  if (input.sendEmail) await sendMembershipConfirmed(granted, plan, base);
   return { ref };
 }
 
@@ -509,5 +565,7 @@ export async function cancelMembership(id: string, refund: boolean) {
     [nowIso(), refunded, giftBack, m.id],
   );
   if (giftBack) await creditCard(m.gift_card_id, giftBack, "refund", { membershipId: m.id, note: `Cancelled ${m.ref}` });
+  // The free extra card of a package goes with it.
+  await run(`UPDATE memberships SET status = 'cancelled', cancelled_at = ? WHERE bonus_of = ? AND status = 'active'`, [nowIso(), m.id]);
   return { refundedCents: refunded, giftRefundCents: giftBack };
 }

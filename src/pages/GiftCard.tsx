@@ -41,12 +41,13 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function BuyForm({ initialFor }: { initialFor: ForWhom }) {
+function BuyForm({ initialFor, initialCents }: { initialFor: ForWhom; initialCents: number | null }) {
   const { t, lang } = useLang();
   const g = t.gift;
   const auth = useAuth();
-  const [amount, setAmount] = useState(10000);
-  const [custom, setCustom] = useState("");
+  // ?amount=14000 (e.g. from a Christmas offer): a preset button when it is one, otherwise the custom field.
+  const [amount, setAmount] = useState(initialCents && PRESETS.includes(initialCents) ? initialCents : 10000);
+  const [custom, setCustom] = useState(initialCents && !PRESETS.includes(initialCents) ? String(initialCents / 100).replace(".", ",") : "");
   const [forWhom, setForWhom] = useState<ForWhom>(initialFor);
   const forSomeone = forWhom === "gift";
   const [f, setF] = useState({ buyerName: auth.name, buyerEmail: auth.email, recipientName: "", recipientEmail: "", message: "", terms: false });
@@ -239,7 +240,7 @@ function StatusView({ ref_, token }: { ref_: string; token: string }) {
       </dl>
       <p className="mt-6 text-sm text-forest/70">{g.how}</p>
       <div className="mt-8 flex flex-wrap gap-4">
-        <Button to={ROUTES.agenda}>{t.nav.book}</Button>
+        <Button to={ROUTES.book}>{t.nav.book}</Button>
         <Button to={ROUTES.gift} variant="ghost">
           {g.another}
         </Button>
@@ -257,6 +258,8 @@ export default function GiftCard() {
   const token = params.get("t") ?? "";
   const aborted = params.get("aborted") === "1";
   const initialFor: ForWhom = params.get("for") === "me" ? "self" : "gift";
+  const wanted = Number(params.get("amount"));
+  const initialCents = Number.isInteger(wanted) && wanted >= MIN * 100 && wanted <= MAX * 100 ? wanted : null;
 
   return (
     <section className="relative pb-28 pt-32 sm:pb-40 sm:pt-44">
@@ -278,7 +281,7 @@ export default function GiftCard() {
         </div>
         <div className="lg:col-span-6">
           {aborted && <p className="mb-6 rounded-xl bg-saffron/10 px-4 py-3 text-sm text-[#a2470b]">{g.aborted}</p>}
-          {ref && token ? <StatusView ref_={ref} token={token} /> : <BuyForm initialFor={initialFor} />}
+          {ref && token ? <StatusView ref_={ref} token={token} /> : <BuyForm initialFor={initialFor} initialCents={initialCents} />}
         </div>
       </div>
     </section>
