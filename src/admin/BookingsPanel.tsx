@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ApiError } from "../lib/api";
+import { FixedLang } from "../i18n/LanguageContext";
+import { BookingCalendar, type Pick } from "../components/booking/BookingCalendar";
+import type { Variant } from "../lib/booking";
 import { adminApi, downloadCsv, euro, policyPercent, when, type AdminBooking, type AdminSession } from "./adminApi";
 import { Badge, Btn, ErrorNote, input, Label, Modal } from "./ui";
 
 const STATUS_TONE = { confirmed: "green", pending: "amber", cancelled: "red", expired: "grey" } as const;
 const digits = (p: string) => p.replace(/[^\d]/g, "").replace(/^00/, "");
 
-export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking; onChanged: () => void; showSession?: boolean }) {
+export function BookingRowCard({ b, onChanged, showSession, showTime }: { b: AdminBooking; onChanged: () => void; showSession?: boolean; showTime?: boolean }) {
   const [cancelling, setCancelling] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -37,9 +40,10 @@ export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking;
           </p>
           {showSession && (
             <p className="text-sm text-forest/70">
-              {b.sessionTitle} · {when(b.sessionStartsAt)}
+              {b.sessionTitle} · {b.sessionBookingMode === "appointment" && b.preferred ? b.preferred : when(b.sessionStartsAt)}
             </p>
           )}
+          {showTime && <p className="text-sm font-semibold text-saffron">{when(b.sessionStartsAt)}</p>}
           <p className="mt-1 text-sm text-forest/70">
             {b.email && (
               <a href={`mailto:${b.email}`} className="underline">
@@ -130,39 +134,17 @@ export function BookingRowCard({ b, onChanged, showSession }: { b: AdminBooking;
 function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ name: "", email: "", phone: "", seats: "1", amount: "", note: "", sendEmail: true });
-  const todayBE = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels" }).format(new Date());
-  const [slotDate, setSlotDate] = useState(() => session.availability?.startDate && session.availability.startDate > todayBE ? session.availability.startDate : todayBE);
-  const [slotTime, setSlotTime] = useState("");
-  const [slots, setSlots] = useState<{ time: string; startsAt: string; endsAt: string }[]>([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
-  const [slotsError, setSlotsError] = useState("");
+  const [pick, setPick] = useState<Pick | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!open || !session.availability?.enabled || !slotDate) return;
-    let active = true;
-    setSlotsLoading(true);
-    setSlotTime("");
-    setSlotsError("");
-    api<{ slots: { time: string; startsAt: string; endsAt: string }[] }>(
-      `/api/sessions?availabilityFor=${encodeURIComponent(session.id)}&date=${encodeURIComponent(slotDate)}`,
-    )
-      .then((d) => active && setSlots(d.slots))
-      .catch((err) => {
-        if (!active) return;
-        setSlots([]);
-        setSlotsError(
-          err instanceof ApiError && err.code === "availability_not_configured"
-            ? "Slots can't be loaded: publish this session and save its weekly availability first."
-            : err instanceof ApiError && err.message !== err.code
-              ? err.message
-              : "Could not load the available slots. Please try again.",
-        );
-      })
-      .finally(() => active && setSlotsLoading(false));
-    return () => { active = false; };
-  }, [open, session.id, session.availability?.enabled, slotDate]);
+  const withHours = session.bookingMode === "appointment" && !!session.availability?.enabled;
+  // The same calendar as on the website (free days in green), for this one treatment.
+  const variant = useMemo<Variant>(
+    () => ({ key: `admin-${session.id}`, mode: "appointment", durationMin: session.durationMin, priceCents: session.priceCents, isOnline: session.isOnline, sessions: [session] }),
+    [session],
+  );
+  const slotDate = pick?.date ?? "";
+  const slotTime = pick?.time ?? "";
 
   if (!open) {
     return (
@@ -173,7 +155,7 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
   }
   const save = async () => {
     if (!f.name.trim()) return setError("Name is required.");
-    if (session.availability?.enabled && (!slotDate || !slotTime)) return setError("Choose an available appointment date and time.");
+    if (withHours && (!slotDate || !slotTime)) return setError("Choose a free day and time in the calendar.");
     const amountCents = f.amount.trim() ? Math.round(Number(f.amount.replace(",", ".")) * 100) : 0;
     if (Number.isNaN(amountCents)) return setError("Amount must be a number.");
     setBusy(true);
@@ -183,10 +165,11 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
         method: "POST",
         body: JSON.stringify({
           action: "manual",
-          booking: { sessionId: session.id, name: f.name, email: f.email, phone: f.phone, seats: Number(f.seats) || 1, amountCents, note: f.note, sendEmail: f.sendEmail && !!f.email, appointmentDate: session.availability?.enabled ? slotDate : "", appointmentTime: session.availability?.enabled ? slotTime : "" },
+          booking: { sessionId: session.id, name: f.name, email: f.email, phone: f.phone, seats: Number(f.seats) || 1, amountCents, note: f.note, sendEmail: f.sendEmail && !!f.email, appointmentDate: withHours ? slotDate : "", appointmentTime: withHours ? slotTime : "" },
         }),
       });
       setOpen(false);
+      setPick(null);
       setF({ name: "", email: "", phone: "", seats: "1", amount: "", note: "", sendEmail: true });
       onDone();
     } catch (err) {
@@ -199,28 +182,16 @@ function ManualBooking({ session, onDone }: { session: AdminSession; onDone: () 
     <div className="rounded-2xl border border-forest/10 bg-white p-5">
       <p className="font-semibold text-ink">Add a booking (e.g. via WhatsApp or paid in cash)</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        {session.availability?.enabled && (
+        {withHours && session.status === "published" && (
           <div className="rounded-xl bg-cream p-4 sm:col-span-2">
-            <Label text="Appointment date">
-              <input type="date" className={input} min={session.availability.startDate} max={session.date} value={slotDate} onChange={(e) => { setSlotDate(e.target.value); setSlotTime(""); }} />
-            </Label>
-            <p className="mt-2 text-xs text-forest/60">Weekdays: {session.availability.weekdays.map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(", ")}</p>
-            {slotsLoading ? (
-              <p className="mt-3 text-sm text-forest/60">Checking available slots…</p>
-            ) : slotsError ? (
-              <p className="mt-3 text-sm text-red-700">{slotsError}</p>
-            ) : slots.length > 0 ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {slots.map((slot) => (
-                  <button key={slot.time} type="button" aria-pressed={slotTime === slot.time} onClick={() => setSlotTime(slot.time)} className={"rounded-full border px-3 py-2 text-sm font-semibold " + (slotTime === slot.time ? "border-forest bg-forest text-white" : "border-forest/20 bg-white text-forest")}>
-                    {slot.time}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-sm text-forest/60">No available slots on this date.</p>
-            )}
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-forest/70">Choose a free day and time</p>
+            <FixedLang lang="en">
+              <BookingCalendar variant={variant} selected={pick} onSelect={setPick} />
+            </FixedLang>
           </div>
+        )}
+        {withHours && session.status !== "published" && (
+          <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900 sm:col-span-2">Show this treatment on the website first; then you can pick a free time here.</p>
         )}
         <Label text="Name *">
           <input className={input} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
@@ -278,15 +249,28 @@ export function SessionBookings({ session, onClose, onChanged }: { session: Admi
     load();
     onChanged();
   };
-  const visible = (list ?? []).filter((b) => showAll || b.status === "confirmed" || b.status === "pending");
+  const appt = session.bookingMode === "appointment";
+  const now = new Date().toISOString();
+  const visible = (list ?? [])
+    .filter((b) => showAll || b.status === "confirmed" || b.status === "pending")
+    // Appointments: coming up first, in time order; the past ones after.
+    .sort((a, b) => (appt ? Number(a.sessionStartsAt < now) - Number(b.sessionStartsAt < now) || a.sessionStartsAt.localeCompare(b.sessionStartsAt) : 0));
   const confirmed = (list ?? []).filter((b) => b.status === "confirmed");
   const seats = confirmed.reduce((n, b) => n + b.seats, 0);
 
   return (
-    <Modal title={`${session.title.nl} · ${when(session.startsAt)}`} onClose={onClose} wide>
+    <Modal title={appt ? `Appointments · ${session.title.nl}` : `${session.title.nl} · ${when(session.startsAt)}`} onClose={onClose} wide>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-forest">
-          <strong>{seats}</strong> of {session.capacity} places booked · {confirmed.length} booking{confirmed.length === 1 ? "" : "s"}
+          {appt ? (
+            <>
+              <strong>{confirmed.filter((b) => b.sessionStartsAt >= now).length}</strong> coming up · {confirmed.length} in total
+            </>
+          ) : (
+            <>
+              <strong>{seats}</strong> of {session.capacity} places booked · {confirmed.length} booking{confirmed.length === 1 ? "" : "s"}
+            </>
+          )}
         </p>
         <div className="flex flex-wrap gap-2">
           <Btn kind="ghost" onClick={() => setShowAll((v) => !v)}>
@@ -307,7 +291,7 @@ export function SessionBookings({ session, onClose, onChanged }: { session: Admi
         ) : visible.length === 0 ? (
           <p className="rounded-2xl bg-white p-6 text-center text-forest/60">No bookings yet.</p>
         ) : (
-          visible.map((b) => <BookingRowCard key={b.id} b={b} onChanged={changed} />)
+          visible.map((b) => <BookingRowCard key={b.id} b={b} onChanged={changed} showTime={appt && !!session.availability?.enabled} />)
         )}
       </div>
     </Modal>

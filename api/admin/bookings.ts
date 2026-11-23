@@ -18,16 +18,31 @@ const csvCell = (v: unknown) => {
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-/** GET /api/admin/bookings?sessionId=<id>  (or no sessionId for the latest 300). Add &format=csv for a spreadsheet. */
+/**
+ * GET /api/admin/bookings?sessionId=<id>  (or no sessionId for the latest 300). Add &format=csv for a spreadsheet.
+ * GET /api/admin/bookings?from=<ISO>&to=<ISO>  confirmed and paying bookings whose session/appointment starts in
+ * that range, in time order (the overview agenda).
+ */
 export const GET = handler(async (req) => {
   requireAdmin(req);
   const q = query(req);
   const sessionId = q.get("sessionId");
-  const rows = await all<BookingRow & { title_nl: string; starts_at: string }>(
-    `SELECT b.*, s.title_nl, COALESCE(b.appointment_start_at, s.starts_at) AS starts_at FROM bookings b JOIN sessions s ON s.id = b.session_id
-     ${sessionId ? "WHERE b.session_id = ?" : "WHERE b.status <> 'expired'"}
-     ORDER BY b.created_at DESC LIMIT 300`,
-    sessionId ? [sessionId] : [],
+  const from = q.get("from");
+  const to = q.get("to");
+  const ranged = !sessionId && !!from && !!to;
+  if (ranged && (Number.isNaN(Date.parse(from!)) || Number.isNaN(Date.parse(to!)))) throw new HttpError(400, "bad_range");
+  const rows = await all<BookingRow & { title_nl: string; starts_at: string; duration_min: number; is_online: number; booking_mode: string }>(
+    `SELECT b.*, s.title_nl, s.duration_min, s.is_online, s.booking_mode, COALESCE(b.appointment_start_at, s.starts_at) AS starts_at
+     FROM bookings b JOIN sessions s ON s.id = b.session_id
+     ${
+       sessionId
+         ? "WHERE b.session_id = ? ORDER BY b.created_at DESC"
+         : ranged
+           ? "WHERE (b.status = 'confirmed' OR (b.status = 'pending' AND b.hold_until > ?)) AND COALESCE(b.appointment_start_at, s.starts_at) >= ? AND COALESCE(b.appointment_start_at, s.starts_at) < ? ORDER BY starts_at ASC"
+           : "WHERE b.status <> 'expired' ORDER BY b.created_at DESC"
+     }
+     LIMIT 300`,
+    sessionId ? [sessionId] : ranged ? [new Date().toISOString(), new Date(from!).toISOString(), new Date(to!).toISOString()] : [],
   );
 
   if (q.get("format") === "csv") {
@@ -50,7 +65,14 @@ export const GET = handler(async (req) => {
 
   return json({
     ok: true,
-    bookings: rows.map((r) => ({ ...adminView(r), sessionTitle: r.title_nl, sessionStartsAt: r.starts_at })),
+    bookings: rows.map((r) => ({
+      ...adminView(r),
+      sessionTitle: r.title_nl,
+      sessionStartsAt: r.starts_at,
+      sessionDurationMin: r.duration_min,
+      sessionIsOnline: !!r.is_online,
+      sessionBookingMode: r.booking_mode === "appointment" ? "appointment" : "scheduled",
+    })),
   });
 });
 
