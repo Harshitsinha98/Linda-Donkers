@@ -60,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     let unsub: (() => void) | undefined;
+    // If the login service is slow or unreachable, show the page after 4 seconds (as logged out)
+    // instead of "Loading…" forever. The session still applies if it arrives later.
+    const slow = window.setTimeout(() => setReady(true), 4000);
     supabase()
       .then(async (sb) => {
         const { data } = await sb.auth.getSession();
@@ -73,8 +76,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           window.history.replaceState(null, "", u.pathname + u.search);
         }
       })
-      .catch(() => setReady(true));
-    return () => unsub?.();
+      .catch(() => setReady(true))
+      .finally(() => window.clearTimeout(slow));
+    return () => {
+      window.clearTimeout(slow);
+      unsub?.();
+    };
   }, []);
 
   const redirect = (returnTo?: string) => `${window.location.origin}${returnTo ?? window.location.pathname + window.location.search}`;
