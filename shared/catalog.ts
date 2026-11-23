@@ -305,6 +305,9 @@ export const DEFAULT_PLANS: PlanSeed[] = [
   },
 ];
 
+/** The packages with a free extra session. They are added to the website automatically (once). */
+export const PACKAGE_PLANS: PlanSeed[] = DEFAULT_PLANS.filter((p) => (p.bonusCredits ?? 0) > 0);
+
 /**
  * Groups the 60- and 90-minute versions of one treatment (and the weekly slots of one class),
  * so the booking page shows "Lomi Lomi Nui" once with a choice of duration.

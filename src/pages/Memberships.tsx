@@ -146,7 +146,8 @@ function PlanCard({ plan, open, onOpen, onClose }: { plan: MembershipPlan; open:
         />
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-ink/60 to-transparent" />
         <span className="absolute bottom-3 left-4 text-[0.72rem] font-bold uppercase tracking-[0.2em] text-linen">
-          {m.sessions(plan.credits)} · {m.valid(plan.validityDays)}
+          {m.sessions(plan.credits)}
+          {plan.bonusCredits > 0 && ` ${m.bonus(plan.bonusCredits)}`} · {m.valid(plan.validityDays)}
         </span>
       </div>
       <div className="flex flex-1 flex-col p-6">
