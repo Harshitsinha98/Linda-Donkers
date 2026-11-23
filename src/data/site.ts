@@ -19,11 +19,34 @@ export const SOCIALS: { name: string; label: string; icon: SocialIcon; href: str
 
 export const YOUTUBE = "https://youtube.com/@lindadonkers1580";
 
+/** Where Linda works. Shown on the home page, contact page and footer. */
+export const LOCATION = "Deurne, Antwerpen";
+export const MAPS_URL = "https://www.google.com/maps/search/?api=1&query=Deurne%2C%20Antwerpen%2C%20Belgi%C3%AB";
+
+/** Linda's massage prices, the same for every massage (M.E.R., Lomi Lomi Nui, Chi Nei Tsang). */
+export const MASSAGE_PRICES = [
+  { minutes: 60, cents: 10000 },
+  { minutes: 90, cents: 14000 },
+] as const;
+export const HEALING_PRICE_CENTS = 4400;
+
+/**
+ * Client testimonials shown on the home and massage pages. Only real quotes, with the client's
+ * permission. The section stays hidden while this list is empty.
+ * Example: { quote: { nl: "…", en: "…" }, name: "An", service: { nl: "Lomi Lomi Nui", en: "Lomi Lomi Nui" } }
+ */
+export const TESTIMONIALS: { quote: { nl: string; en: string }; name: string; service: { nl: string; en: string } }[] = [];
+
 export const ROUTES = {
   home: "/",
   about: "/over-linda",
   yoga: "/kundalini-yoga",
   massage: "/massage",
+  healing: "/sat-nam-rasayan",
+  events: "/evenementen",
+  offers: "/aanbod",
+  /** The booking page (calendar). The old /agenda addresses redirect here. */
+  book: "/boeken",
   agenda: "/agenda",
   booking: "/boeking",
   admin: "/admin",

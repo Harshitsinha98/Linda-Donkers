@@ -67,12 +67,17 @@ export type MembershipPlan = {
   scope: string[];
   photo: string;
   status: string;
+  /** Free extra sessions that come with the card (separate card after purchase). */
+  bonusCredits: number;
+  bonusScope: string[];
 };
 
 export type MembershipView = {
   id: string;
   ref: string;
   planId: string;
+  /** Set on the free card that came with a package (id of the paid card). */
+  bonusOf?: string | null;
   name: { nl: string; en: string };
   photo: string;
   holder: string;

@@ -14,7 +14,7 @@ export function SessionCard({ s }: { s: PublicSession }) {
 
   return (
     <Link
-      to={`${ROUTES.agenda}/${s.id}`}
+      to={`${ROUTES.book}?id=${encodeURIComponent(s.id)}`}
       className="group flex h-full flex-col overflow-hidden rounded-[1.6rem] border border-forest/10 bg-linen transition-[transform,box-shadow] duration-500 hover:-translate-y-1 hover:shadow-[0_30px_60px_-35px_rgba(46,58,47,0.45)]"
       data-cursor="hover"
     >

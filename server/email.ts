@@ -107,7 +107,7 @@ const copy = {
     unlimited: "Onbeperkt",
     validUntil: "Geldig tot",
     howTo:
-      "Zo gebruik je het: log in op de website met dit e-mailadres (Google/Gmail of een inloglink per mail), kies een sessie in de agenda en kies bij het boeken voor \"Betaal met mijn beurtenkaart\".",
+      "Zo gebruik je het: log in op de website met dit e-mailadres (Google/Gmail of een inloglink per mail), kies je sessie op de boekingspagina en kies bij het boeken voor \"Betaal met mijn beurtenkaart\". Zit er een gratis sessie bij je pakket? Die staat als aparte kaart in je account.",
     account: "Naar mijn account",
   },
   en: {
@@ -148,7 +148,7 @@ const copy = {
     unlimited: "Unlimited",
     validUntil: "Valid until",
     howTo:
-      "How to use it: log in on the website with this email address (Google/Gmail or an email login link), pick a session in the agenda and choose \"Pay with my class card\" when booking.",
+      "How to use it: log in on the website with this email address (Google/Gmail or an email login link), pick your session on the booking page and choose \"Pay with my class card\" when booking. Does your package include a free session? It shows as a separate card in your account.",
     account: "Go to my account",
   },
 };
@@ -381,7 +381,7 @@ ${rows([
   [en ? "Valid until" : "Geldig tot", until],
 ])}
 <p style="font-size:14px;line-height:1.6;margin:0 0 14px">${esc(how)}</p>
-${button(`${base}/agenda`, en ? "Book a session" : "Boek een sessie", "#2e3a2f")}
+${button(`${base}/boeken`, en ? "Book a session" : "Boek een sessie", "#2e3a2f")}
 <p style="margin:26px 0 0;font-size:15px;line-height:1.6">${L(g.lang).bye}</p>`);
 
   const tasks: Promise<boolean>[] = [];

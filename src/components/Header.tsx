@@ -64,14 +64,15 @@ export function Header() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Massage first: it is Linda's main offer. Class cards, gift cards and the gallery are in the footer.
   const links = [
-    { to: ROUTES.about, label: t.nav.about },
-    { to: ROUTES.yoga, label: t.nav.yoga },
     { to: ROUTES.massage, label: t.nav.massage },
-    { to: ROUTES.agenda, label: t.nav.agenda },
-    { to: ROUTES.memberships, label: t.nav.memberships },
+    { to: ROUTES.healing, label: t.nav.healing },
+    { to: ROUTES.yoga, label: t.nav.yoga },
+    { to: ROUTES.events, label: t.nav.events },
     { to: ROUTES.travel, label: t.nav.travel },
-    { to: ROUTES.gallery, label: t.nav.gallery },
+    { to: ROUTES.offers, label: t.nav.offers },
+    { to: ROUTES.about, label: t.nav.about },
     { to: ROUTES.contact, label: t.nav.contact },
   ];
 
@@ -98,12 +99,12 @@ export function Header() {
             </div>
 
             <nav className="hidden items-center gap-1 xl:flex" aria-label="Hoofdmenu">
-              {links.slice(0, 6).map((l) => (
+              {links.map((l, i) => (
                 <NavLink
                   key={l.to}
                   to={l.to}
                   className={({ isActive }) =>
-                    `group relative px-3 py-2 text-[0.85rem] font-medium transition-colors ${
+                    `group relative whitespace-nowrap px-2.5 py-2 text-[0.82rem] font-medium transition-colors ${i >= 6 ? "hidden 2xl:block " : ""}${
                       isActive ? "text-saffron" : "text-forest hover:text-saffron"
                     }`
                   }
@@ -142,16 +143,16 @@ export function Header() {
               </Link>
               <Magnetic>
                 <Link
-                  to={ROUTES.agenda}
-                  className="hidden rounded-full bg-forest px-5 py-3 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-linen transition-colors duration-300 hover:bg-saffron lg:inline-flex"
+                  to={`${ROUTES.book}?cat=massage`}
+                  className="hidden whitespace-nowrap rounded-full bg-saffron px-5 py-3 text-[0.72rem] font-bold uppercase tracking-[0.16em] text-linen transition-colors duration-300 hover:bg-forest lg:inline-flex"
                 >
-                  {t.nav.book}
+                  {t.nav.bookMassage}
                 </Link>
               </Magnetic>
               <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-[5px] rounded-full border border-forest/20 xl:hidden"
+                className="flex h-11 w-11 shrink-0 flex-col items-center justify-center gap-[5px] rounded-full border border-forest/20 2xl:hidden"
                 aria-label={t.nav.menu}
                 aria-expanded={open}
               >
@@ -191,7 +192,7 @@ export function Header() {
               </button>
             </div>
             <nav className="container-x flex min-h-0 flex-1 flex-col justify-center gap-1 overflow-y-auto py-4" aria-label="Mobiel menu" data-lenis-prevent>
-              {[{ to: ROUTES.home, label: t.nav.home }, ...links, { to: ROUTES.account, label: t.nav.account }].map((l, i) => (
+              {[{ to: ROUTES.home, label: t.nav.home }, { to: ROUTES.book, label: t.nav.book }, ...links, { to: ROUTES.account, label: t.nav.account }].map((l, i) => (
                 <div key={l.to} className="overflow-hidden">
                   <motion.div
                     initial={{ y: "110%" }}

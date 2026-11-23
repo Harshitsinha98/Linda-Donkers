@@ -26,6 +26,8 @@ type PlanForm = {
   photo: string;
   sort: string;
   status: "active" | "hidden";
+  bonusCredits: string;
+  bonusScope: string[];
 };
 
 const fromPlan = (p?: AdminPlan): PlanForm =>
@@ -34,9 +36,9 @@ const fromPlan = (p?: AdminPlan): PlanForm =>
         nameNl: p.name.nl, nameEn: p.name.en === p.name.nl ? "" : p.name.en, descriptionNl: p.description.nl,
         descriptionEn: p.description.en === p.description.nl ? "" : p.description.en, price: centsToText(p.priceCents),
         credits: String(p.credits), validityDays: String(p.validityDays), scope: p.scope, photo: p.photo, sort: "0",
-        status: p.status === "hidden" ? "hidden" : "active",
+        status: p.status === "hidden" ? "hidden" : "active", bonusCredits: String(p.bonusCredits ?? 0), bonusScope: p.bonusScope ?? [],
       }
-    : { nameNl: "", nameEn: "", descriptionNl: "", descriptionEn: "", price: "", credits: "10", validityDays: "365", scope: [], photo: "", sort: "0", status: "active" };
+    : { nameNl: "", nameEn: "", descriptionNl: "", descriptionEn: "", price: "", credits: "10", validityDays: "365", scope: [], photo: "", sort: "0", status: "active", bonusCredits: "0", bonusScope: [] };
 
 function PlanEditor({ plan, onClose, onSaved }: { plan?: AdminPlan; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState<PlanForm>(() => fromPlan(plan));
@@ -44,6 +46,7 @@ function PlanEditor({ plan, onClose, onSaved }: { plan?: AdminPlan; onClose: () 
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof PlanForm>(k: K, v: PlanForm[K]) => setF((x) => ({ ...x, [k]: v }));
   const toggleScope = (k: string) => set("scope", f.scope.includes(k) ? f.scope.filter((x) => x !== k) : [...f.scope, k]);
+  const toggleBonus = (k: string) => set("bonusScope", f.bonusScope.includes(k) ? f.bonusScope.filter((x) => x !== k) : [...f.bonusScope, k]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +58,13 @@ function PlanEditor({ plan, onClose, onSaved }: { plan?: AdminPlan; onClose: () 
     if (!(credits >= 0) || !Number.isInteger(credits)) return setError("Number of sessions: a whole number, 0 = unlimited.");
     if (!(validityDays >= 1)) return setError("Validity must be at least 1 day.");
     if (f.scope.length === 0) return setError("Choose which sessions this membership can be used for.");
+    const bonusCredits = Number(f.bonusCredits) || 0;
+    if (!(bonusCredits >= 0) || !Number.isInteger(bonusCredits)) return setError("Free extra sessions: a whole number (0 = none).");
+    if (bonusCredits > 0 && f.bonusScope.length === 0) return setError("Choose which sessions the free extra session can be used for.");
     const payload = {
       nameNl: f.nameNl, nameEn: f.nameEn, descriptionNl: f.descriptionNl, descriptionEn: f.descriptionEn, priceCents, credits, validityDays,
       scope: f.scope, photo: f.photo, sort: Number(f.sort) || 0, status: f.status,
+      bonusCredits, bonusScope: bonusCredits > 0 ? f.bonusScope : [],
     };
     setBusy(true);
     setError("");
@@ -120,6 +127,22 @@ function PlanEditor({ plan, onClose, onSaved }: { plan?: AdminPlan; onClose: () 
               </label>
             ))}
           </div>
+        </div>
+
+        <div className="rounded-2xl bg-sand/40 p-4 sm:col-span-2">
+          <Label text="Free extra sessions (gift)" hint="E.g. 1 free yoga class with 3 massages. The customer gets them on a separate card with the same end date. 0 = none.">
+            <input type="number" min={0} max={20} className={`${input} max-w-[8rem]`} value={f.bonusCredits} onChange={(e) => set("bonusCredits", e.target.value)} />
+          </Label>
+          {Number(f.bonusCredits) > 0 && (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {SCOPE_OPTIONS.map(([k, label]) => (
+                <label key={k} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 text-sm text-forest">
+                  <input type="checkbox" className="h-4 w-4 accent-[var(--color-saffron)]" checked={f.bonusScope.includes(k)} onChange={() => toggleBonus(k)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="sm:col-span-2">
@@ -352,9 +375,11 @@ export function MembershipsTab() {
     }
   };
 
+  const [seedNote, setSeedNote] = useState("");
   const seed = async () => {
     try {
-      await adminApi("/api/admin/memberships", { method: "POST", body: JSON.stringify({ action: "seedPlans" }) });
+      const r = await adminApi<{ created: number }>("/api/admin/memberships", { method: "POST", body: JSON.stringify({ action: "seedPlans" }) });
+      setSeedNote(r.created ? `${r.created} standard card(s) added.` : "All standard cards and packages already exist.");
       loadPlans();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create.");
@@ -379,10 +404,15 @@ export function MembershipsTab() {
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {plans && plans.length > 0 && (
             <Btn kind="ghost" onClick={() => setGranting(true)}>
               + Add for a customer
+            </Btn>
+          )}
+          {view === "plans" && plans && plans.length > 0 && (
+            <Btn kind="ghost" onClick={seed}>
+              + Add missing standard cards & packages
             </Btn>
           )}
           {view === "plans" && <Btn onClick={() => setEditing("new")}>+ New membership</Btn>}
@@ -391,13 +421,14 @@ export function MembershipsTab() {
 
       <div className="mt-6 grid gap-3">
         <ErrorNote text={error} />
+        {seedNote && view === "plans" && <p className="rounded-xl bg-white px-4 py-3 text-sm text-forest">{seedNote}</p>}
         {view === "plans" ? (
           !plans ? (
             <p className="text-forest/60">Loading…</p>
           ) : plans.length === 0 ? (
             <div className="rounded-3xl bg-white p-10 text-center">
               <p className="font-display text-2xl text-ink">No memberships yet</p>
-              <p className="mt-2 text-forest/70">Create your own, or start with your standard cards (10× yoga €200, 5× M.E.R. €600, 5× Lomi Lomi €600).</p>
+              <p className="mt-2 text-forest/70">Create your own, or start with your standard cards (10× yoga €200, 5× M.E.R. €600, 5× Lomi Lomi €600) and packages (3 massages + 1 free yoga class €420, 5 massages + 1 free healing €600).</p>
               <div className="mt-6 flex flex-wrap justify-center gap-3">
                 <Btn kind="ghost" onClick={seed}>
                   Create my standard cards
@@ -416,6 +447,7 @@ export function MembershipsTab() {
                   </div>
                   <p className="mt-1 text-sm text-forest/70">
                     {euro(p.priceCents)} · {p.credits ? `${p.credits} sessions` : "unlimited"} · {p.validityDays} days · {scopeLabel(p.scope)}
+                    {p.bonusCredits > 0 && ` · + ${p.bonusCredits} free: ${scopeLabel(p.bonusScope)}`}
                   </p>
                   <p className="mt-1 text-sm text-forest/60">
                     Sold {p.sold}× · {euro(p.revenueCents)}

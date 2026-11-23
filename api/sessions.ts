@@ -4,13 +4,17 @@ import {
   getSessionImage,
   getSessionWithTaken,
   getAvailableAppointmentSlots,
+  getAvailableAppointmentSlotsInRange,
   listUpcomingPublic,
+  MAX_CALENDAR_DAYS,
   toPublic,
 } from "../server/sessions.js";
 
 /**
  * GET /api/sessions             -> upcoming published sessions (?limit, ?category)
  * GET /api/sessions?id=<id>     -> one published session
+ * GET /api/sessions?availabilityFor=<id>&date=YYYY-MM-DD           -> free times on one day
+ * GET /api/sessions?calendarFor=<id>&from=YYYY-MM-DD&to=YYYY-MM-DD -> free times per day (booking calendar)
  * GET /api/session-image?id=<id> -> session cover photo (rewritten here to share this function)
  */
 export const GET = handler(async (req) => {
@@ -31,6 +35,16 @@ export const GET = handler(async (req) => {
         "Content-Length": String(body.length),
       },
     });
+  }
+
+  const calendarFor = q.get("calendarFor");
+  if (calendarFor) {
+    const from = q.get("from") ?? "";
+    const to = q.get("to") ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) throw new HttpError(400, "bad_range");
+    const span = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000;
+    if (span > MAX_CALENDAR_DAYS) throw new HttpError(400, "range_too_long");
+    return json({ ok: true, days: await getAvailableAppointmentSlotsInRange(calendarFor, from, to) });
   }
 
   const availabilityFor = q.get("availabilityFor");

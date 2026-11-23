@@ -47,7 +47,8 @@ export function MobileBar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [isHome]);
 
-  const hidden = pathname.startsWith(`${ROUTES.agenda}/`) || pathname.startsWith(ROUTES.booking);
+  // Hidden while booking, so it never covers the pay button.
+  const hidden = pathname.startsWith(ROUTES.book) || pathname.startsWith(ROUTES.agenda) || pathname.startsWith(ROUTES.booking);
   if (hidden) return null;
 
   return (
@@ -74,7 +75,7 @@ export function MobileBar() {
         <MailIcon />
       </a>
       <Link
-        to={ROUTES.agenda}
+        to={`${ROUTES.book}?cat=massage`}
         tabIndex={show ? 0 : -1}
         className="flex flex-1 items-center justify-center rounded-full bg-saffron whitespace-nowrap px-3 text-[0.92rem] font-semibold text-linen"
       >

@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { lazy, Suspense, useCallback, useState } from "react";
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { Header } from "./components/Header";
 import { Footer } from "./components/Footer";
 import { Preloader } from "./components/Preloader";
@@ -19,8 +19,10 @@ const Travel = lazy(() => import("./pages/Travel"));
 const Gallery = lazy(() => import("./pages/Gallery"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Legal = lazy(() => import("./pages/Legal"));
-const Agenda = lazy(() => import("./pages/Agenda"));
-const SessionDetail = lazy(() => import("./pages/SessionDetail"));
+const Book = lazy(() => import("./pages/Book"));
+const Healing = lazy(() => import("./pages/Healing"));
+const Events = lazy(() => import("./pages/Events"));
+const Offers = lazy(() => import("./pages/Offers"));
 const BookingStatus = lazy(() => import("./pages/BookingStatus"));
 const Memberships = lazy(() => import("./pages/Memberships"));
 const Account = lazy(() => import("./pages/Account"));
@@ -29,6 +31,18 @@ const AdminApp = lazy(() => import("./admin/AdminApp"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const EASE = [0.76, 0, 0.24, 1] as const;
+
+/** Old /agenda links (emails, Stripe, shared links) go to the booking page, keeping ?cat=…. */
+function AgendaRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={`${ROUTES.book}${search}`} replace />;
+}
+
+/** Old /agenda/:id links open the booking page with that session selected. */
+function SessionRedirect() {
+  const { id = "" } = useParams();
+  return <Navigate to={`${ROUTES.book}?id=${encodeURIComponent(id)}`} replace />;
+}
 
 /** Beige curtain that sweeps over the screen between pages. */
 function Page({ children }: { children: React.ReactNode }) {
@@ -82,8 +96,12 @@ function Site() {
               <Route path={ROUTES.about} element={<Page><About /></Page>} />
               <Route path={ROUTES.yoga} element={<Page><Yoga /></Page>} />
               <Route path={ROUTES.massage} element={<Page><Massage /></Page>} />
-              <Route path={ROUTES.agenda} element={<Page><Agenda /></Page>} />
-              <Route path={`${ROUTES.agenda}/:id`} element={<Page><SessionDetail /></Page>} />
+              <Route path={ROUTES.book} element={<Page><Book /></Page>} />
+              <Route path={ROUTES.agenda} element={<AgendaRedirect />} />
+              <Route path={`${ROUTES.agenda}/:id`} element={<SessionRedirect />} />
+              <Route path={ROUTES.healing} element={<Page><Healing /></Page>} />
+              <Route path={ROUTES.events} element={<Page><Events /></Page>} />
+              <Route path={ROUTES.offers} element={<Page><Offers /></Page>} />
               <Route path={`${ROUTES.booking}/:ref`} element={<Page><BookingStatus /></Page>} />
               <Route path={ROUTES.memberships} element={<Page><Memberships /></Page>} />
               <Route path={ROUTES.membershipsOld} element={<Page><Memberships /></Page>} />
