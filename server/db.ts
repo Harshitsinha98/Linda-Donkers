@@ -245,15 +245,54 @@ async function open(): Promise<Client> {
     const { createClient } = await import("@libsql/client/web");
     client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN, intMode: "number" });
   }
-  for (const statement of SCHEMA) await client.execute(statement);
+  await ensureSchema(client);
+  return client;
+}
+
+/** Short fingerprint of the schema + migrations above: changes whenever one of them is added or edited. */
+function schemaVersion(): string {
+  let h = 2166136261;
+  for (const ch of SCHEMA.join("\n") + "\n" + MIGRATIONS.join("\n")) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return `v1-${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Creates tables and adds new columns, but only when the stored schema version differs from this
+ * code's. A serverless function used to run all ~40 statements on every cold start, one network
+ * round trip each (about 10 seconds against Turso). Now a cold start costs one small query; the
+ * full setup runs once after each deploy that changes the schema.
+ */
+async function ensureSchema(client: Client) {
+  const version = schemaVersion();
+  try {
+    const r = await client.execute("SELECT value FROM _meta WHERE key = 'schema'");
+    if (String(r.rows[0]?.value ?? "") === version) return;
+  } catch {
+    /* no _meta table yet: first run on this database */
+  }
+  // All tables in one round trip (one transaction).
+  await client.batch(
+    [...SCHEMA, `CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`].map((sql) => ({ sql, args: [] })),
+    "write",
+  );
+  let failed = false;
   for (const statement of MIGRATIONS) {
     try {
       await client.execute(statement);
-    } catch {
-      /* column already exists */
+    } catch (err) {
+      // "duplicate column" = already migrated. Anything else: don't mark the schema as done, retry next time.
+      if (!/duplicate column/i.test(String((err as Error)?.message ?? err))) {
+        failed = true;
+        console.error("[db] migration failed:", statement, err);
+      }
     }
   }
-  return client;
+  if (!failed) {
+    await client.execute({
+      sql: "INSERT INTO _meta (key, value) VALUES ('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      args: [version],
+    });
+  }
 }
 
 function client(): Promise<Client> {
