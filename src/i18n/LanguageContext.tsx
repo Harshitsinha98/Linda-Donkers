@@ -36,3 +36,9 @@ export function useLang() {
   if (!ctx) throw new Error("useLang must be used inside LanguageProvider");
   return ctx;
 }
+
+/** Shows its children in one fixed language (e.g. the English admin panel reusing site components). */
+export function FixedLang({ lang, children }: { lang: Lang; children: ReactNode }) {
+  const value = useMemo(() => ({ lang, t: content[lang], setLang: () => {} }), [lang]);
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+}

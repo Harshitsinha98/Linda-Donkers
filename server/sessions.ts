@@ -111,6 +111,7 @@ const availabilitySchema = z.object({
   bufferMinutes: z.number().int().min(0).max(180).default(0),
 });
 export type AvailabilityRule = z.infer<typeof availabilitySchema>;
+export const availabilityInput = availabilitySchema;
 
 export const EMPTY_AVAILABILITY: AvailabilityRule = {
   enabled: false, startDate: "", weekdays: [], intervalWeeks: 1, slotTimes: [], bufferMinutes: 0,
@@ -339,6 +340,39 @@ export async function updateSession(id: string, input: SessionInput) {
     nowIso(),
     id,
   ]);
+}
+
+/**
+ * Applies the same weekly hours to several appointment sessions. Each session is checked with the
+ * normal session rules (slots must not overlap for its own duration) and the normal booking
+ * protection (no change while it has active appointments). Returns one result per session.
+ */
+export async function setAvailabilityMany(ids: string[], rule: AvailabilityRule) {
+  const results: { id: string; title: string; ok: boolean; error?: string }[] = [];
+  for (const id of [...new Set(ids)]) {
+    const row = await getSessionRow(id);
+    if (!row) {
+      results.push({ id, title: "", ok: false, error: "Session not found." });
+      continue;
+    }
+    const title = row.title_nl;
+    if (row.booking_mode !== "appointment") {
+      results.push({ id, title, ok: false, error: "Weekly hours are only for sessions by appointment." });
+      continue;
+    }
+    const parsed = sessionInput.safeParse({ ...rowToInput(row), availability: rule });
+    if (!parsed.success) {
+      results.push({ id, title, ok: false, error: parsed.error.issues[0]?.message ?? "Invalid hours." });
+      continue;
+    }
+    try {
+      await updateSession(id, parsed.data);
+      results.push({ id, title, ok: true });
+    } catch (err) {
+      results.push({ id, title, ok: false, error: err instanceof HttpError ? err.message : "Could not save." });
+    }
+  }
+  return results;
 }
 
 export async function deleteSession(id: string) {
